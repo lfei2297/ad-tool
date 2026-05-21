@@ -8,7 +8,7 @@ import zipfile
 # ==========================
 # 页面配置
 # ==========================
-st.set_page_config(page_title="广告素材生成工具 v4", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="广告素材生成工具 v5", page_icon="🚀", layout="wide")
 st.title("🚀 广告素材批量生成与拆分工具 (双模块版)")
 
 # ==========================
@@ -16,14 +16,13 @@ st.title("🚀 广告素材批量生成与拆分工具 (双模块版)")
 # ==========================
 st.sidebar.header("🎯 核心功能选择")
 
-# ✨ 新增：功能模块切换器
 PROCESS_MODE = st.sidebar.radio(
     "🔄 请选择工作模式：",
     [
         "模块一：基础独立拆分 (原版)", 
         "模块二：同SKU+国家聚合拆分 (新版)"
     ],
-    help="模块一：每行独立拆分。模块二：自动将相同国家且相同 SKU 的数据合并计算总素材数后再拆分。"
+    help="模块一：每行独立拆分。模块二：按国家和SKU合并计算总素材数拆分，且文件名附带国家。"
 )
 
 st.sidebar.markdown("---")
@@ -92,9 +91,6 @@ def expand_material_versions(row):
         e_m = end_select if has_select else (start_material + material_count - 1)
         return [f"{prefix}{i}" for i in range(s_m, e_m + 1)]
 
-# ==========================
-# 模板下载模块
-# ==========================
 def get_template_buffer():
     template_data = {
         "广告账号ID": ["", "", ""],
@@ -114,6 +110,9 @@ def get_template_buffer():
     t_buffer.seek(0)
     return t_buffer
 
+# ==========================
+# 界面布局
+# ==========================
 st.markdown("### 📥 1. 规范数据格式")
 st.download_button(
     label="点击下载：标准输入表格模板.xlsx",
@@ -123,15 +122,10 @@ st.download_button(
 )
 
 st.markdown("---")
-
-# ==========================
-# 主界面数据处理逻辑
-# ==========================
 st.markdown("### 📂 2. 上传数据并生成")
 uploaded_file = st.file_uploader("请上传填入好数据的表格 (.xlsx)", type=["xlsx"])
 
 if uploaded_file is not None:
-    # 动态改变按钮文案，让用户清楚当前在用哪个模块
     btn_text = "⚡ 开始执行：模块一 (独立拆分)" if "模块一" in PROCESS_MODE else "⚡ 开始执行：模块二 (聚合拆分)"
     
     if st.button(btn_text, type="primary"):
@@ -160,11 +154,12 @@ if uploaded_file is not None:
                         temp_df = temp_df.sort_values(by="广告素材版本名称", key=lambda x: x.map(natural_sort_key))
                         if REPEAT_SECOND > 1: temp_df = pd.concat([temp_df] * REPEAT_SECOND, ignore_index=True)
                         
-                        file_groups[material_len].append(temp_df)
+                        # 模块一：直接按素材数命名
+                        file_groups[f"素材数_{material_len}"].append(temp_df)
                         all_dfs.append(temp_df)
 
                 # ==========================================
-                # 模块二逻辑：同国家+同SKU聚合拆分
+                # 模块二逻辑：同国家+同SKU聚合拆分 (带国家备注)
                 # ==========================================
                 else:
                     processed_records = []
@@ -194,10 +189,17 @@ if uploaded_file is not None:
                         
                         processed_records.append({"df": temp_df, "group_key": group_key})
 
-                    # 第二阶段：根据总数分发
+                    # 第二阶段：根据总数和国家分发
                     for record in processed_records:
-                        total_material_len = group_material_totals[record["group_key"]]
-                        file_groups[total_material_len].append(record["df"])
+                        group_key = record["group_key"]
+                        country = group_key[1]  # 提取国家名称
+                        total_material_len = group_material_totals[group_key]
+                        
+                        # ✨ 核心修改点：将国家加入到字典键值（即未来的文件名）中
+                        country_str = f"{country}_" if country else ""
+                        file_key = f"{country_str}素材数_{total_material_len}"
+                        
+                        file_groups[file_key].append(record["df"])
                         all_dfs.append(record["df"])
 
                 # ==========================================
@@ -207,16 +209,15 @@ if uploaded_file is not None:
                 
                 if all_dfs:
                     total_df = pd.concat(all_dfs, ignore_index=True)
-                    # 如果是模块二，对总表进行优雅的归类排序
                     if "模块二" in PROCESS_MODE:
                         total_df = total_df.sort_values(by=["真实SKU", "虚拟SKU", "国家"], kind="stable")
                     output_tasks["总表"] = total_df
                     
-                for material_len, dfs in file_groups.items():
+                for task_name, dfs in file_groups.items():
                     sub_df = pd.concat(dfs, ignore_index=True)
                     if "模块二" in PROCESS_MODE:
                         sub_df = sub_df.sort_values(by=["真实SKU", "虚拟SKU", "国家"], kind="stable")
-                    output_tasks[f"素材数_{material_len}"] = sub_df
+                    output_tasks[task_name] = sub_df
 
                 # 生成 ZIP
                 zip_buffer = io.BytesIO()
@@ -250,6 +251,8 @@ if uploaded_file is not None:
                                             worksheet.set_row(row_idx + 1, None, fmt)
                         
                         excel_buffer.seek(0)
+                        
+                        # 最终文件名拼装逻辑：用户自定义前缀 + (国家 +) 素材数
                         prefix_clean = str(FILE_PREFIX).strip()
                         final_filename = f"{prefix_clean}{file_name}.xlsx"
                         zip_file.writestr(final_filename, excel_buffer.read())
