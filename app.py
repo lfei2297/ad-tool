@@ -8,18 +8,27 @@ import zipfile
 # ==========================
 # 页面配置
 # ==========================
-st.set_page_config(page_title="广告素材生成工具 v2", page_icon="🚀", layout="wide")
-st.title("🚀 广告素材批量生成与拆分工具")
+st.set_page_config(page_title="广告素材生成工具 v4", page_icon="🚀", layout="wide")
+st.title("🚀 广告素材批量生成与拆分工具 (双模块版)")
 
 # ==========================
-# 左侧边栏：参数设置
+# 左侧边栏：参数与模块设置
 # ==========================
-st.sidebar.header("⚙️ 参数设置")
+st.sidebar.header("🎯 核心功能选择")
 
-# ✨ 新功能 2：允许用户自定义结果文件的前缀名称
-FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_", help="生成的文件名将以该文本开头，例如：项目A_总表.xlsx")
+# ✨ 新增：功能模块切换器
+PROCESS_MODE = st.sidebar.radio(
+    "🔄 请选择工作模式：",
+    [
+        "模块一：基础独立拆分 (原版)", 
+        "模块二：同SKU+国家聚合拆分 (新版)"
+    ],
+    help="模块一：每行独立拆分。模块二：自动将相同国家且相同 SKU 的数据合并计算总素材数后再拆分。"
+)
 
-st.sidebar.markdown("---") # 分割线
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ 细节参数设置")
+FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_", help="生成的文件名将以该文本开头")
 REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1)
 REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1)
 ENABLE_COLOR = st.sidebar.checkbox("开启 SKU 颜色标记", value=True)
@@ -84,34 +93,31 @@ def expand_material_versions(row):
         return [f"{prefix}{i}" for i in range(s_m, e_m + 1)]
 
 # ==========================
-# ✨ 新功能 1：自动生成 Excel 模板供用户下载
+# 模板下载模块
 # ==========================
 def get_template_buffer():
     template_data = {
         "广告账号ID": ["", "", ""],
         "主页ID": ["", "", ""],
         "像素ID": ["", "", ""],
-        "真实SKU": ["SKU-A", "SKU-B", "SKU-A"],
+        "真实SKU": ["SKU1", "SKU1", "SKU1"],
         "虚拟SKU": ["", "", ""],
-        "国家": ["德国", "德国", "德国"],
-        "着陆页版本名称": ["优化组版本-OPDY-1", "优化组版本-OPDY", "优化组版本-OPDY-5"],
-        "广告素材版本名称": ["优化组版本-OPDY-S-2560511-25", "优化组版本-OPDY-S-2560511-1-5", "优化组版本-OPDY-S-2560511-21"],
-        "广告素材数量": [2, 3, 3],
-        "素材选取 (X-Y)": ["", "5-7", ""]
+        "国家": ["美国", "德国", "美国"],
+        "着陆页版本名称": ["着陆页版本1", "着陆页版本2", "着陆页版本3"],
+        "广告素材版本名称": ["优化组-11", "优化组-22", "优化组-33"],
+        "广告素材数量": [2, 3, 4],
+        "素材选取 (X-Y)": ["", "", ""]
     }
     t_df = pd.DataFrame(template_data)
     t_buffer = io.BytesIO()
-    # 使用 openpyxl 写入纯数据模板
     t_df.to_excel(t_buffer, index=False, engine='openpyxl')
     t_buffer.seek(0)
     return t_buffer
 
-# 在页面顶部上方渲染下载模板按钮
 st.markdown("### 📥 1. 规范数据格式")
-template_bytes = get_template_buffer()
 st.download_button(
     label="点击下载：标准输入表格模板.xlsx",
-    data=template_bytes,
+    data=get_template_buffer(),
     file_name="标准输入表格模板.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
@@ -125,43 +131,96 @@ st.markdown("### 📂 2. 上传数据并生成")
 uploaded_file = st.file_uploader("请上传填入好数据的表格 (.xlsx)", type=["xlsx"])
 
 if uploaded_file is not None:
-    if st.button("⚡ 开始处理与生成", type="primary"):
-        with st.spinner("正在拼命处理中，请稍候..."):
+    # 动态改变按钮文案，让用户清楚当前在用哪个模块
+    btn_text = "⚡ 开始执行：模块一 (独立拆分)" if "模块一" in PROCESS_MODE else "⚡ 开始执行：模块二 (聚合拆分)"
+    
+    if st.button(btn_text, type="primary"):
+        with st.spinner("正在拼命处理中..."):
             try:
-                # 1. 读取数据
                 df = pd.read_excel(uploaded_file, dtype=str).fillna("")
-                
-                # 2. 处理数据
                 file_groups = defaultdict(list)
                 all_dfs = []
+                
+                # ==========================================
+                # 模块一逻辑：独立拆分
+                # ==========================================
+                if "模块一" in PROCESS_MODE:
+                    for _, row in df.iterrows():
+                        versions = expand_material_versions(row)
+                        if not versions: continue
+                        
+                        material_len = len(versions)
+                        new_rows = []
+                        for v in versions:
+                            new_row = row.copy()
+                            new_row["广告素材版本名称"] = v
+                            for _ in range(REPEAT_FIRST): new_rows.append(new_row.copy())
+                        
+                        temp_df = pd.DataFrame(new_rows)
+                        temp_df = temp_df.sort_values(by="广告素材版本名称", key=lambda x: x.map(natural_sort_key))
+                        if REPEAT_SECOND > 1: temp_df = pd.concat([temp_df] * REPEAT_SECOND, ignore_index=True)
+                        
+                        file_groups[material_len].append(temp_df)
+                        all_dfs.append(temp_df)
 
-                for _, row in df.iterrows():
-                    versions = expand_material_versions(row)
-                    if not versions: continue
-                    material_len = len(versions)
-                    new_rows = []
-                    for v in versions:
-                        new_row = row.copy()
-                        new_row["广告素材版本名称"] = v
-                        for _ in range(REPEAT_FIRST): new_rows.append(new_row.copy())
-                    
-                    temp_df = pd.DataFrame(new_rows)
-                    temp_df = temp_df.sort_values(by="广告素材版本名称", key=lambda x: x.map(natural_sort_key))
-                    if REPEAT_SECOND > 1: temp_df = pd.concat([temp_df] * REPEAT_SECOND, ignore_index=True)
-                    
-                    file_groups[material_len].append(temp_df)
-                    all_dfs.append(temp_df)
+                # ==========================================
+                # 模块二逻辑：同国家+同SKU聚合拆分
+                # ==========================================
+                else:
+                    processed_records = []
+                    group_material_totals = defaultdict(int)
 
-                # 3. 准备输出任务
+                    # 第一阶段：统计聚合数据
+                    for _, row in df.iterrows():
+                        versions = expand_material_versions(row)
+                        if not versions: continue
+                        
+                        material_len = len(versions)
+                        sku = str(row.get("真实SKU", "")).strip() or str(row.get("虚拟SKU", "")).strip()
+                        country = str(row.get("国家", "")).strip()
+                        group_key = (sku, country)
+                        
+                        group_material_totals[group_key] += material_len
+                        
+                        new_rows = []
+                        for v in versions:
+                            new_row = row.copy()
+                            new_row["广告素材版本名称"] = v
+                            for _ in range(REPEAT_FIRST): new_rows.append(new_row.copy())
+                        
+                        temp_df = pd.DataFrame(new_rows)
+                        temp_df = temp_df.sort_values(by="广告素材版本名称", key=lambda x: x.map(natural_sort_key))
+                        if REPEAT_SECOND > 1: temp_df = pd.concat([temp_df] * REPEAT_SECOND, ignore_index=True)
+                        
+                        processed_records.append({"df": temp_df, "group_key": group_key})
+
+                    # 第二阶段：根据总数分发
+                    for record in processed_records:
+                        total_material_len = group_material_totals[record["group_key"]]
+                        file_groups[total_material_len].append(record["df"])
+                        all_dfs.append(record["df"])
+
+                # ==========================================
+                # 统一打包与输出装配
+                # ==========================================
                 output_tasks = {}
-                if all_dfs: output_tasks["总表"] = pd.concat(all_dfs, ignore_index=True)
+                
+                if all_dfs:
+                    total_df = pd.concat(all_dfs, ignore_index=True)
+                    # 如果是模块二，对总表进行优雅的归类排序
+                    if "模块二" in PROCESS_MODE:
+                        total_df = total_df.sort_values(by=["真实SKU", "虚拟SKU", "国家"], kind="stable")
+                    output_tasks["总表"] = total_df
+                    
                 for material_len, dfs in file_groups.items():
-                    output_tasks[f"素材数_{material_len}"] = pd.concat(dfs, ignore_index=True)
+                    sub_df = pd.concat(dfs, ignore_index=True)
+                    if "模块二" in PROCESS_MODE:
+                        sub_df = sub_df.sort_values(by=["真实SKU", "虚拟SKU", "国家"], kind="stable")
+                    output_tasks[f"素材数_{material_len}"] = sub_df
 
-                # 4. 生成 Excel 并打包成 ZIP
+                # 生成 ZIP
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                    
                     for file_name, final_df in output_tasks.items():
                         excel_buffer = io.BytesIO()
                         
@@ -173,12 +232,10 @@ if uploaded_file is not None:
                                 final_df.to_excel(writer, index=False, sheet_name=sheet_name)
                                 workbook, worksheet = writer.book, writer.sheets[sheet_name]
 
-                                # 自动列宽
                                 for i, col in enumerate(final_df.columns):
                                     max_len = max(final_df[col].astype(str).map(len).max(), len(col)) + 2
                                     worksheet.set_column(i, i, max_len)
 
-                                # 颜色标记
                                 if ENABLE_COLOR:
                                     color_map = {}
                                     colors = ["#FFF2CC", "#E2EFDA", "#DDEBF7", "#F8CBAD", "#E4DFEC", "#D9D9D9"]
@@ -193,20 +250,15 @@ if uploaded_file is not None:
                                             worksheet.set_row(row_idx + 1, None, fmt)
                         
                         excel_buffer.seek(0)
-                        
-                        # 🚀 核心修改：在这里把用户输入的自定前缀拼接到文件名里
-                        # 如果用户输入了前缀，例如 "20260521_"，最终会变为 "20260521_总表.xlsx"
                         prefix_clean = str(FILE_PREFIX).strip()
                         final_filename = f"{prefix_clean}{file_name}.xlsx"
-                        
                         zip_file.writestr(final_filename, excel_buffer.read())
                 
                 zip_buffer.seek(0)
-                st.success("🎉 全部生成完成！")
+                st.success("🎉 处理成功！请点击下方按钮下载打包好的数据。")
                 
-                # 提供下载按钮
                 st.download_button(
-                    label="📦 点击下载处理结果 (ZIP压缩包)",
+                    label="📦 点击一键下载结果 (ZIP压缩包)",
                     data=zip_buffer,
                     file_name=f"{prefix_clean}广告素材结果.zip" if prefix_clean else "广告素材结果.zip",
                     mime="application/zip"
