@@ -8,20 +8,25 @@ import zipfile
 # ==========================
 # 页面配置
 # ==========================
-st.set_page_config(page_title="广告素材生成工具", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="广告素材生成工具 v2", page_icon="🚀", layout="wide")
 st.title("🚀 广告素材批量生成与拆分工具")
 
 # ==========================
 # 左侧边栏：参数设置
 # ==========================
 st.sidebar.header("⚙️ 参数设置")
+
+# ✨ 新功能 2：允许用户自定义结果文件的前缀名称
+FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_", help="生成的文件名将以该文本开头，例如：项目A_总表.xlsx")
+
+st.sidebar.markdown("---") # 分割线
 REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1)
 REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1)
 ENABLE_COLOR = st.sidebar.checkbox("开启 SKU 颜色标记", value=True)
 FAST_MODE = st.sidebar.checkbox("开启极速模式 (直接输出纯数据)", value=False)
 
 # ==========================
-# 工具函数 (复用你优化后的核心逻辑)
+# 工具函数 (核心解析逻辑)
 # ==========================
 def natural_sort_key(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split('([0-9]+)', str(s))]
@@ -79,9 +84,45 @@ def expand_material_versions(row):
         return [f"{prefix}{i}" for i in range(s_m, e_m + 1)]
 
 # ==========================
-# 主界面逻辑
+# ✨ 新功能 1：自动生成 Excel 模板供用户下载
 # ==========================
-uploaded_file = st.file_uploader("📂 请上传基础素材表格 (.xlsx)", type=["xlsx"])
+def get_template_buffer():
+    template_data = {
+        "广告账号ID": ["", "", ""],
+        "主页ID": ["", "", ""],
+        "像素ID": ["", "", ""],
+        "真实SKU": ["SKU-A", "SKU-B", "SKU-A"],
+        "虚拟SKU": ["", "", ""],
+        "国家": ["德国", "德国", "德国"],
+        "着陆页版本名称": ["优化组版本-OPDY-1", "优化组版本-OPDY", "优化组版本-OPDY-5"],
+        "广告素材版本名称": ["优化组版本-OPDY-S-2560511-25", "优化组版本-OPDY-S-2560511-1-5", "优化组版本-OPDY-S-2560511-21"],
+        "广告素材数量": [2, 3, 3],
+        "素材选取 (X-Y)": ["", "5-7", ""]
+    }
+    t_df = pd.DataFrame(template_data)
+    t_buffer = io.BytesIO()
+    # 使用 openpyxl 写入纯数据模板
+    t_df.to_excel(t_buffer, index=False, engine='openpyxl')
+    t_buffer.seek(0)
+    return t_buffer
+
+# 在页面顶部上方渲染下载模板按钮
+st.markdown("### 📥 1. 规范数据格式")
+template_bytes = get_template_buffer()
+st.download_button(
+    label="点击下载：标准输入表格模板.xlsx",
+    data=template_bytes,
+    file_name="标准输入表格模板.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+st.markdown("---")
+
+# ==========================
+# 主界面数据处理逻辑
+# ==========================
+st.markdown("### 📂 2. 上传数据并生成")
+uploaded_file = st.file_uploader("请上传填入好数据的表格 (.xlsx)", type=["xlsx"])
 
 if uploaded_file is not None:
     if st.button("⚡ 开始处理与生成", type="primary"):
@@ -117,7 +158,7 @@ if uploaded_file is not None:
                 for material_len, dfs in file_groups.items():
                     output_tasks[f"素材数_{material_len}"] = pd.concat(dfs, ignore_index=True)
 
-                # 4. 生成 Excel 并打包成 ZIP (全在内存中进行，无需写入本地硬盘)
+                # 4. 生成 Excel 并打包成 ZIP
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                     
@@ -152,17 +193,22 @@ if uploaded_file is not None:
                                             worksheet.set_row(row_idx + 1, None, fmt)
                         
                         excel_buffer.seek(0)
-                        zip_file.writestr(f"{file_name}.xlsx", excel_buffer.read())
+                        
+                        # 🚀 核心修改：在这里把用户输入的自定前缀拼接到文件名里
+                        # 如果用户输入了前缀，例如 "20260521_"，最终会变为 "20260521_总表.xlsx"
+                        prefix_clean = str(FILE_PREFIX).strip()
+                        final_filename = f"{prefix_clean}{file_name}.xlsx"
+                        
+                        zip_file.writestr(final_filename, excel_buffer.read())
                 
                 zip_buffer.seek(0)
-                
-                st.success("🎉 全部生成完成！已将所有文件打包，请点击下方按钮下载。")
+                st.success("🎉 全部生成完成！")
                 
                 # 提供下载按钮
                 st.download_button(
-                    label="📦 一键下载全部结果 (ZIP压缩包)",
+                    label="📦 点击下载处理结果 (ZIP压缩包)",
                     data=zip_buffer,
-                    file_name="广告素材处理结果.zip",
+                    file_name=f"{prefix_clean}广告素材结果.zip" if prefix_clean else "广告素材结果.zip",
                     mime="application/zip"
                 )
 
