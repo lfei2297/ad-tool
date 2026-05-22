@@ -9,7 +9,7 @@ import zipfile
 # 页面配置
 # ==========================
 st.set_page_config(page_title="广告素材生成工具 v14", page_icon="🚀", layout="wide")
-st.title("🚀 广告素材批量生成工具 (V14)")
+st.title("🚀 广告素材批量生成工具")
 
 # ==========================
 # 左侧边栏
