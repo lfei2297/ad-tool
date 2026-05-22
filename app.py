@@ -8,8 +8,8 @@ import zipfile
 # ==========================
 # 页面配置
 # ==========================
-st.set_page_config(page_title="广告素材生成工具 v13", page_icon="🚀", layout="wide")
-st.title("🚀 广告素材批量生成工具 (V13 旗舰优化版)")
+st.set_page_config(page_title="广告素材生成工具 v14", page_icon="🚀", layout="wide")
+st.title("🚀 广告素材批量生成工具 (V14)")
 
 # ==========================
 # 左侧边栏
@@ -23,19 +23,18 @@ PROCESS_MODE = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 全局参数设置")
 FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
-REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1)
-REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1)
+REPEAT_FIRST = st.sidebar.number_input("广告组数", min_value=1, value=1)
+REPEAT_SECOND = st.sidebar.number_input("系列数", min_value=1, value=1)
 ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
-FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式)", value=False)
+FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
 
 # ==========================
-# 核心逻辑函数
+# 核心解析函数
 # ==========================
 def natural_sort_key(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split('([0-9]+)', str(s))]
 
 def expand_material_versions(row):
-    """智能解析素材版本名称逻辑"""
     base_name = str(row.get("广告素材版本名称", "")).strip()
     lp_name = str(row.get("着陆页版本名称", "")).strip()
     try:
@@ -70,12 +69,13 @@ def expand_material_versions(row):
         return [f"{prefix}{i}" for i in range(start, end + 1)]
 
 def smart_grouping_logic(df_to_group, group_size):
-    """模块三：智能分组与打标 (去重SKU)"""
+    # 过滤无效行
     df_clean = df_to_group[df_to_group["真实SKU"].astype(str).str.strip() != ""].copy()
     df_clean = df_clean[~df_clean["真实SKU"].astype(str).str.contains("总计|空白", na=False)]
+    
     records = df_clean.to_dict('records')
-    # 排序增加稳定性
-    records = sorted(records, key=lambda x: (str(x.get("真实SKU","")), str(x.get("国家","")), str(x.get("着陆页版本名称",""))))
+    # 预排序增加离散度稳定性
+    records = sorted(records, key=lambda x: (str(x.get("真实SKU","")), str(x.get("着陆页版本名称",""))))
     
     buckets = []
     for rec in records:
@@ -92,14 +92,12 @@ def smart_grouping_logic(df_to_group, group_size):
         count = len(bucket)
         for row in bucket:
             row["分组"] = f"分组{idx+1}"
-            # ✨ 更新：格式修改为 1_数量
             row["分组数量"] = f"{idx+1}_{count}"
             row["备注"] = "满足要求" if count == group_size else "不满足"
             final_rows.append(row)
     return pd.DataFrame(final_rows)
 
 def write_excel_clean(df, sheet_name, is_m3=False):
-    """统一删除辅助列并渲染样式"""
     cols_to_del = ["广告素材数量", "素材选取 (X-Y)", "素材选取"]
     df_out = df.drop(columns=[c for c in cols_to_del if c in df.columns])
     
@@ -127,12 +125,10 @@ def write_excel_clean(df, sheet_name, is_m3=False):
 # ==========================
 if "模块三" in PROCESS_MODE:
     st.subheader("🛠️ 模块三：智能分组处理中心")
-    
-    # ✨ 更新：将分组规模放置在右侧主界面
     col_a, col_b = st.columns([1, 3])
     with col_a:
         GROUP_SIZE = st.number_input("📦 分组规模 (每组数量)", min_value=1, value=30)
-    
+
     st.markdown("#### **步骤一：生成展开总表**")
     f1 = st.file_uploader("----请上传原始表格", type=["xlsx"], key="m3s1")
     if f1:
@@ -151,6 +147,7 @@ if "模块三" in PROCESS_MODE:
     f2 = st.file_uploader("----请输入数据处理后的总表 (或直接上传原始表一键生成)", type=["xlsx"], key="m3s2")
     if f2:
         df_in = pd.read_excel(f2, dtype=str).fillna("")
+        # 判定是否需要执行步骤一展开
         if "广告素材数量" in df_in.columns:
             exp = []
             for _, row in df_in.iterrows():
@@ -191,10 +188,8 @@ else:
                 country = str(row.get("国家","")).strip()
                 m2_agg[(sku, country)].append(tmp); m2_counts[(sku, country)] += m_len
 
-        # ✨ 更新：模块二及模块一的总表增加 SKU 和 国家排序
+        # ✨ 模块二已根据您的要求取消强制排序逻辑
         total_df = pd.concat(all_exp, ignore_index=True)
-        if "模块二" in PROCESS_MODE:
-            total_df = total_df.sort_values(by=["真实SKU", "国家"], kind="stable")
         tasks["总表"] = total_df
 
         if "模块一" in PROCESS_MODE:
@@ -202,9 +197,7 @@ else:
         else:
             for (sku, country), dfs in m2_agg.items():
                 tag = f"{country}_" if country else ""
-                # 分表也应用排序
-                sub_df = pd.concat(dfs, ignore_index=True).sort_values(by=["真实SKU", "国家"], kind="stable")
-                tasks[f"{tag}素材数_{m2_counts[(sku, country)]}"] = sub_df
+                tasks[f"{tag}素材数_{m2_counts[(sku, country)]}"] = pd.concat(dfs, ignore_index=True)
 
         zip_b = io.BytesIO()
         with zipfile.ZipFile(zip_b, "w") as zf:
