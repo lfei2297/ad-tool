@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import re
@@ -9,13 +8,31 @@ import zipfile
 # ==========================
 # 页面配置
 # ==========================
-st.set_page_config(page_title="广告素材生成工具 v15", page_icon="🚀", layout="wide")
-st.title("🚀 广告素材批量生成工具 (V15 旗舰增强版)")
+st.set_page_config(page_title="广告素材生成工具 v16", page_icon="🚀", layout="wide")
+st.title("🚀 广告素材批量生成工具 ")
 
 # ==========================
-# 模板下载功能
+# 左侧边栏：参数配置
+# ==========================
+st.sidebar.header("🎯 核心功能选择")
+PROCESS_MODE = st.sidebar.radio(
+    "🔄 请选择工作模式：",
+    ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)"]
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ 全局参数设置")
+FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
+REPEAT_FIRST = st.sidebar.number_input("广告组数", min_value=1, value=1)
+REPEAT_SECOND = st.sidebar.number_input("系列数", min_value=1, value=1)
+ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
+FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
+
+# ==========================
+# 工具函数
 # ==========================
 def get_template_excel():
+    """生成原始表模板"""
     template_data = {
         "广告账号ID": ["", "", ""],
         "主页ID": ["", "", ""],
@@ -34,36 +51,11 @@ def get_template_excel():
         df.to_excel(writer, index=False, sheet_name="模板")
     return out.getvalue()
 
-st.sidebar.markdown("### 📥 资源下载")
-st.sidebar.download_button(
-    label="⬇️ 下载原始表Excel模板",
-    data=get_template_excel(),
-    file_name="广告素材原始表模板.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+def natural_sort_key(s):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split('([0-9]+)', str(s))]
 
-# ==========================
-# 左侧边栏配置
-# ==========================
-st.sidebar.markdown("---")
-st.sidebar.header("🎯 核心功能选择")
-PROCESS_MODE = st.sidebar.radio(
-    "🔄 请选择工作模式：",
-    ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)"]
-)
-
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ 全局参数设置")
-FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
-REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1)
-REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1)
-ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
-FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
-
-# ==========================
-# 核心解析函数 (V14逻辑保持不变)
-# ==========================
 def expand_material_versions(row):
+    """解析素材版本号"""
     base_name = str(row.get("广告素材版本名称", "")).strip()
     lp_name = str(row.get("着陆页版本名称", "")).strip()
     try:
@@ -98,6 +90,7 @@ def expand_material_versions(row):
         return [f"{prefix}{i}" for i in range(start, end + 1)]
 
 def smart_grouping_logic(df_to_group, group_size):
+    """分组逻辑：格式为 X_GroupSize，备注满足要求"""
     df_clean = df_to_group[df_to_group["真实SKU"].astype(str).str.strip() != ""].copy()
     df_clean = df_clean[~df_clean["真实SKU"].astype(str).str.contains("总计|空白", na=False)]
     records = df_clean.to_dict('records')
@@ -124,6 +117,7 @@ def smart_grouping_logic(df_to_group, group_size):
     return pd.DataFrame(final_rows)
 
 def write_excel_clean(df, sheet_name, is_m3=False):
+    """统一删除辅助列并处理样式"""
     cols_to_del = ["广告素材数量", "素材选取 (X-Y)", "素材选取"]
     df_out = df.drop(columns=[c for c in cols_to_del if c in df.columns])
     
@@ -147,8 +141,18 @@ def write_excel_clean(df, sheet_name, is_m3=False):
     return output.getvalue()
 
 # ==========================
-# 业务逻辑界面
+# 右侧主界面
 # ==========================
+# 📥 第一步：资源下载（移到右侧顶部）
+st.markdown("### 📥 资源下载")
+st.download_button(
+    label="⬇️ 下载：原始素材表 Excel 模板",
+    data=get_template_excel(),
+    file_name="广告素材原始表模板.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+st.markdown("---")
+
 if "模块三" in PROCESS_MODE:
     st.subheader("🛠️ 模块三：智能分组处理中心")
     col_a, col_b = st.columns([1, 3])
@@ -186,6 +190,7 @@ if "模块三" in PROCESS_MODE:
         st.download_button("💾 导出智能分组总表", data=write_excel_clean(res, "分组结果", True), file_name=f"{FILE_PREFIX}智能分组总表.xlsx")
 
 else:
+    st.subheader(f"🛠️ {PROCESS_MODE}")
     up = st.file_uploader("📂 上传原始素材表 (.xlsx)", type=["xlsx"])
     if up and st.button("🚀 开始处理"):
         df_raw = pd.read_excel(up, dtype=str).fillna("")
