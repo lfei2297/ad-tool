@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import re
@@ -8,12 +9,43 @@ import zipfile
 # ==========================
 # 页面配置
 # ==========================
-st.set_page_config(page_title="广告素材生成工具 v14", page_icon="🚀", layout="wide")
-st.title("🚀 广告素材批量生成工具")
+st.set_page_config(page_title="广告素材生成工具 v15", page_icon="🚀", layout="wide")
+st.title("🚀 广告素材批量生成工具 (V15 旗舰增强版)")
 
 # ==========================
-# 左侧边栏
+# 模板下载功能
 # ==========================
+def get_template_excel():
+    template_data = {
+        "广告账号ID": ["", "", ""],
+        "主页ID": ["", "", ""],
+        "像素ID": ["", "", ""],
+        "真实SKU": ["SKU001", "SKU002", "SKU003"],
+        "虚拟SKU": ["V-SKU001", "", ""],
+        "国家": ["美国", "德国", "英国"],
+        "着陆页版本名称": ["优化组版本-LP-1", "优化组版本-LP-2", "优化组版本-LP-1"],
+        "广告素材版本名称": ["素材版本-A-1", "素材版本-B-5", "素材版本-C-1"],
+        "广告素材数量": [5, 3, 10],
+        "素材选取 (X-Y)": ["", "1-3", "5-14"]
+    }
+    df = pd.DataFrame(template_data)
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="模板")
+    return out.getvalue()
+
+st.sidebar.markdown("### 📥 资源下载")
+st.sidebar.download_button(
+    label="⬇️ 下载原始表Excel模板",
+    data=get_template_excel(),
+    file_name="广告素材原始表模板.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# ==========================
+# 左侧边栏配置
+# ==========================
+st.sidebar.markdown("---")
 st.sidebar.header("🎯 核心功能选择")
 PROCESS_MODE = st.sidebar.radio(
     "🔄 请选择工作模式：",
@@ -23,17 +55,14 @@ PROCESS_MODE = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 全局参数设置")
 FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
-REPEAT_FIRST = st.sidebar.number_input("广告组数", min_value=1, value=1)
-REPEAT_SECOND = st.sidebar.number_input("系列数", min_value=1, value=1)
+REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1)
+REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1)
 ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
 FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
 
 # ==========================
-# 核心解析函数
+# 核心解析函数 (V14逻辑保持不变)
 # ==========================
-def natural_sort_key(s):
-    return [int(t) if t.isdigit() else t.lower() for t in re.split('([0-9]+)', str(s))]
-
 def expand_material_versions(row):
     base_name = str(row.get("广告素材版本名称", "")).strip()
     lp_name = str(row.get("着陆页版本名称", "")).strip()
@@ -69,12 +98,9 @@ def expand_material_versions(row):
         return [f"{prefix}{i}" for i in range(start, end + 1)]
 
 def smart_grouping_logic(df_to_group, group_size):
-    # 过滤无效行
     df_clean = df_to_group[df_to_group["真实SKU"].astype(str).str.strip() != ""].copy()
     df_clean = df_clean[~df_clean["真实SKU"].astype(str).str.contains("总计|空白", na=False)]
-    
     records = df_clean.to_dict('records')
-    # 预排序增加离散度稳定性
     records = sorted(records, key=lambda x: (str(x.get("真实SKU","")), str(x.get("着陆页版本名称",""))))
     
     buckets = []
@@ -147,7 +173,6 @@ if "模块三" in PROCESS_MODE:
     f2 = st.file_uploader("----请输入数据处理后的总表 (或直接上传原始表一键生成)", type=["xlsx"], key="m3s2")
     if f2:
         df_in = pd.read_excel(f2, dtype=str).fillna("")
-        # 判定是否需要执行步骤一展开
         if "广告素材数量" in df_in.columns:
             exp = []
             for _, row in df_in.iterrows():
@@ -188,7 +213,6 @@ else:
                 country = str(row.get("国家","")).strip()
                 m2_agg[(sku, country)].append(tmp); m2_counts[(sku, country)] += m_len
 
-        # ✨ 模块二已根据您的要求取消强制排序逻辑
         total_df = pd.concat(all_exp, ignore_index=True)
         tasks["总表"] = total_df
 
