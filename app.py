@@ -90,22 +90,53 @@ def expand_material_versions(row):
         return [f"{prefix}{i}" for i in range(start, end + 1)]
 
 def smart_grouping_logic(df_to_group, group_size):
-    """分组逻辑：格式为 X_GroupSize，备注满足要求"""
-    df_clean = df_to_group[df_to_group["真实SKU"].astype(str).str.strip() != ""].copy()
-    df_clean = df_clean[~df_clean["真实SKU"].astype(str).str.contains("总计|空白", na=False)]
-    records = df_clean.to_dict('records')
-    records = sorted(records, key=lambda x: (str(x.get("真实SKU","")), str(x.get("着陆页版本名称",""))))
+    """
+    V17 增强逻辑：
+    1. 支持 真实SKU 与 虚拟SKU 的联合唯一性判定。
+    2. 按照 真实SKU -> 虚拟SKU -> 着陆页版本 排序。
+    3. 确保每组内 SKU 不重复。
+    """
+    # 填充空值以便排序和逻辑处理
+    df_proc = df_to_group.copy()
+    df_proc["真实SKU"] = df_proc["真实SKU"].astype(str).str.strip().replace("nan", "")
+    df_proc["虚拟SKU"] = df_proc["虚拟SKU"].astype(str).str.strip().replace("nan", "")
+    df_proc["着陆页版本名称"] = df_proc["着陆页版本名称"].astype(str).str.strip().replace("nan", "")
+
+    # 1. 执行多维排序
+    df_sorted = df_proc.sort_values(by=["真实SKU", "虚拟SKU", "着陆页版本名称"]).reset_index(drop=True)
     
+    records = df_sorted.to_dict('records')
     buckets = []
+
     for rec in records:
-        sku = (str(rec.get("真实SKU", "")).strip() or str(rec.get("虚拟SKU", "")).strip())
+        # 获取当前行的“有效SKU”标识：优先真实，次选虚拟
+        current_sku = rec["真实SKU"] if rec["真实SKU"] != "" else rec["虚拟SKU"]
+        
+        # 如果两者都为空，则跳过或设为特定占位符（此处选择跳过无效行）
+        if not current_sku:
+            continue
+
         placed = False
         for bucket in buckets:
-            if len(bucket) >= group_size: continue
-            if sku not in { (str(r.get("真实SKU","")).strip() or str(r.get("虚拟SKU","")).strip()) for r in bucket }:
-                bucket.append(rec); placed = True; break
-        if not placed: buckets.append([rec])
+            # 检查条件：1. 组未满； 2. 组内不存在相同的有效SKU
+            if len(bucket) >= group_size:
+                continue
+            
+            # 提取该组内已有的所有SKU标识（包含真实和虚拟的联合判定）
+            existing_skus_in_bucket = {
+                (r["真实SKU"] if r["真实SKU"] != "" else r["虚拟SKU"]) for r in bucket
+            }
+            
+            if current_sku not in existing_skus_in_bucket:
+                bucket.append(rec)
+                placed = True
+                break
+        
+        # 如果所有现有的组都放不下（已满或SKU冲突），则开新组
+        if not placed:
+            buckets.append([rec])
     
+    # 2. 重新整合数据并打标
     final_rows = []
     for idx, bucket in enumerate(buckets):
         count = len(bucket)
@@ -114,6 +145,7 @@ def smart_grouping_logic(df_to_group, group_size):
             row["分组数量"] = f"{idx+1}_{count}"
             row["备注"] = "满足要求" if count == group_size else "不满足"
             final_rows.append(row)
+            
     return pd.DataFrame(final_rows)
 
 def write_excel_clean(df, sheet_name, is_m3=False):
