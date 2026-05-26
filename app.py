@@ -26,7 +26,13 @@ def get_template_standard():
     return out.getvalue()
 
 def get_template_m4():
-    """模块四专用的结构补齐模板"""
+    """模块四专用的结构补齐模板 - 严格表头版"""
+    # 按照您要求的顺序排列字段
+    columns = [
+        "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
+        "国家", "着陆页版本名称", "广告素材版本名称", 
+        "提供素材版本数量", "广告组数量", "导品系列数", "补充默认版本数"
+    ]
     data = {
         "广告账号ID": ["1018641536297906"],
         "主页ID": ["391776977343478"],
@@ -36,12 +42,12 @@ def get_template_m4():
         "国家": ["德国"],
         "着陆页版本名称": ["优化组版本-OPDY-1"],
         "广告素材版本名称": ["优化组版本-OPDY-S-2560525-3-1"],
-        "提供素材版本数量": [3],   # 对应解析出 3-1, 3-2, 3-3
-        "广告组数量": [1],        # 1:N:N 结构中的组数
-        "导品系列数": [1],        # 系列数
-        "补充默认版本数": [1]      # 需要补齐的默认版本个数
+        "提供素材版本数量": [3],
+        "广告组数量": [1],
+        "导品系列数": [1],
+        "补充默认版本数": [1]
     }
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data, columns=columns) # 强制指定表头顺序
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="模块四专用模板")
