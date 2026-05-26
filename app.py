@@ -43,44 +43,37 @@ st.download_button(
 st.markdown("---") # 分割线，区分下载区和下方的功能操作区
 
 # ==========================
-# 2. 侧边栏及功能模块加载
+# 第二步：侧边栏及功能模块加载
 # ==========================
 
 st.sidebar.header("🎯 模块导航")
-mode = st.sidebar.radio("请选择功能模块", ["模块一", "模块二", "模块三", "模块四(待开发)"])
+mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本(待开发)"])
 
-# 2. 公共参数透传
 st.sidebar.header("⚙️ 全局参数设置")
 
-# 1. 文件前缀
+# 1. 文件名前缀
 FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
 
-# 2. 重复次数逻辑 (模块一、二、三通用的展开逻辑)
-st.sidebar.subheader("🔄 素材展开设置")
-REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数")
-REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数")
+# 2. 核心重复逻辑（对应之前的 REPEAT_FIRST 和 REPEAT_SECOND）
+st.sidebar.subheader("🔄 素材重复设置")
+REPEAT_1 = st.sidebar.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数")
+REPEAT_2 = st.sidebar.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数")
 
-# 3. 业务层级的数量设置 (用于文件名或特定逻辑)
-st.sidebar.subheader("📊 业务规模设置")
-AD_GROUP_COUNT = st.sidebar.number_input("广告组数", min_value=1, value=1)
-SERIES_COUNT = st.sidebar.number_input("系列数", min_value=1, value=1)
-
-# 4. 开关
+# 3. 视觉与性能开关
+st.sidebar.markdown("---")
 ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
-FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
+FAST_MODE = st.sidebar.checkbox("开启极速模式", value=False)
 
-# 将所有参数打包传给模块
+# 将参数封装，传给各模块使用
 params = {
     "prefix": FILE_PREFIX,
-    "repeat_1": REPEAT_FIRST,
-    "repeat_2": REPEAT_SECOND,
-    "ad_group": AD_GROUP_COUNT,
-    "series": SERIES_COUNT,
+    "repeat_1": REPEAT_1,
+    "repeat_2": REPEAT_2,
     "enable_color": ENABLE_COLOR,
     "fast_mode": FAST_MODE
 }
 
-# 3. 动态加载
+# 第三步： 动态加载
 if mode == "模块一":
     module_1.run(params)
 elif mode == "模块二":
