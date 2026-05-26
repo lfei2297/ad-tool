@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import utils  # 先导入工具类
 from modules import module_1, module_2, module_3  # 假设你已经拆分了模块
 
 # 1. 页面配置
