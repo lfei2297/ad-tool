@@ -50,11 +50,34 @@ st.sidebar.header("🎯 模块导航")
 mode = st.sidebar.radio("请选择功能模块", ["模块一", "模块二", "模块三", "模块四(待开发)"])
 
 # 2. 公共参数透传
+st.sidebar.header("⚙️ 全局参数设置")
+
+# 1. 文件前缀
+FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
+
+# 2. 重复次数逻辑 (模块一、二、三通用的展开逻辑)
+st.sidebar.subheader("🔄 素材展开设置")
+REPEAT_FIRST = st.sidebar.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数")
+REPEAT_SECOND = st.sidebar.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数")
+
+# 3. 业务层级的数量设置 (用于文件名或特定逻辑)
+st.sidebar.subheader("📊 业务规模设置")
+AD_GROUP_COUNT = st.sidebar.number_input("广告组数", min_value=1, value=1)
+SERIES_COUNT = st.sidebar.number_input("系列数", min_value=1, value=1)
+
+# 4. 开关
+ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
+FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
+
+# 将所有参数打包传给模块
 params = {
-    "prefix": st.sidebar.text_input("文件前缀", "项目A_"),
-    "repeat_1": st.sidebar.number_input("重复1", 1),
-    "enable_color": st.sidebar.checkbox("开启着色", True),
-    "fast_mode": st.sidebar.checkbox("极速模式", False)
+    "prefix": FILE_PREFIX,
+    "repeat_1": REPEAT_FIRST,
+    "repeat_2": REPEAT_SECOND,
+    "ad_group": AD_GROUP_COUNT,
+    "series": SERIES_COUNT,
+    "enable_color": ENABLE_COLOR,
+    "fast_mode": FAST_MODE
 }
 
 # 3. 动态加载
