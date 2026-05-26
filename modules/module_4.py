@@ -13,6 +13,15 @@ def run(params):
     2. 按『广告组数量 × 每个组的广告数』生成结构。
     3. 若素材不足，自动补齐『默认版本』。
     """)
+    
+    # ✨ 修改：将 repeat_1 改名为更符合业务的“组内广告数”
+    col_m4_1, col_m4_2 = st.columns(2)
+    with col_m4_1:
+        ads_per_group = st.number_input("📐 组内广告数 (N)", min_value=1, value=2, help="对应结构中每个组下的广告数量")
+        params['repeat_1'] = ads_per_group
+    with col_m4_2:
+        # 模块四通常不需要系列级整体翻倍，默认设为 1
+        params['repeat_2'] = 1
 
     up = st.file_uploader("📂 上传原始素材表 (.xlsx)", type=["xlsx"], key="m4_up")
     

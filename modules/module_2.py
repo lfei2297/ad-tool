@@ -8,7 +8,11 @@ import zipfile
 # 现在可以安全地从根目录导入 utils 了
 from utils import expand_material_versions, write_excel_final
 
+
 def run(params):
+    # ✨ 新增：在模块内部锁定重复次数为 1，不显示在界面上
+    params['repeat_1'] = 1
+    params['repeat_2'] = 1
     st.subheader("🌍 模块二：同SKU+国家聚合拆分")
     up = st.file_uploader("📂 上传原始素材表 (.xlsx)", type=["xlsx"], key="m2_up")
     

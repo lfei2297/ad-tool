@@ -7,9 +7,15 @@ from utils import expand_material_versions, write_excel_final
 
 def run(params):
     st.subheader("🛠️ 模块三：智能分组处理中心")
-    col_a, _ = st.columns([1, 3])
+    # ✨ 修改：将重复设置从侧边栏挪到这里
+    col_a, col_b = st.columns(2)
     with col_a:
         group_size = st.number_input("📦 分组规模", min_value=1, value=30)
+    with col_b:
+        # 模块三只需要第一次重复（素材展开），不需要第二次（整体翻倍）
+        repeat_1 = st.number_input("🔄 素材展开次数", min_value=1, value=1, help="同组内对应广告素材版本重复次数，非特定情况下默认为1")
+        params['repeat_1'] = repeat_1
+        params['repeat_2'] = 1
 
     st.markdown("#### **步骤一：生成展开总表**")
     f1 = st.file_uploader("----请上传原始表格", type=["xlsx"], key="m3f1")
