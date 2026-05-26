@@ -11,34 +11,59 @@ st.title("🚀 广告素材批量生成工具")
 # ==========================
 # 📥 第一步：资源下载 (放在这里)
 # ==========================
-def get_template_excel():
-    """生成原始表模板"""
-    template_data = {
-        "广告账号ID": ["", "", ""],
-        "主页ID": ["", "", ""],
-        "像素ID": ["", "", ""],
-        "真实SKU": ["SKU001", "SKU002", "SKU003"],
-        "虚拟SKU": ["V-SKU001", "", ""],
-        "国家": ["美国", "德国", "英国"],
-        "着陆页版本名称": ["优化组版本-LP-1", "优化组版本-LP-2", "优化组版本-LP-1"],
-        "广告素材版本名称": ["素材版本-A-1", "素材版本-B-5", "素材版本-C-1"],
-        "广告素材数量": [5, 3, 10],
-        "素材选取 (X-Y)": ["", "1-3", "5-14"]
+def get_template_standard():
+    """模块一/二/三的标准模板"""
+    data = {
+        "广告账号ID": ["ACC123"], "主页ID": ["P01"], "像素ID": ["PX01"],
+        "真实SKU": ["SKU01"], "虚拟SKU": ["V01"], "国家": ["美国"],
+        "着陆页版本名称": ["LP-1"], "广告素材版本名称": ["Material-1"],
+        "广告素材数量": [5], "素材选取 (X-Y)": [""]
     }
-    df = pd.DataFrame(template_data)
+    df = pd.DataFrame(data)
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="模板")
+        df.to_excel(writer, index=False, sheet_name="标准模板")
+    return out.getvalue()
+
+def get_template_m4():
+    """模块四专用的结构补齐模板"""
+    data = {
+        "广告账号ID": ["1018641536297906"],
+        "主页ID": ["391776977343478"],
+        "像素ID": ["806016751628770"],
+        "真实SKU": ["L2295705"],
+        "虚拟SKU": [""],
+        "国家": ["德国"],
+        "着陆页版本名称": ["优化组版本-OPDY-1"],
+        "广告素材版本名称": ["优化组版本-OPDY-S-2560525-3-1"],
+        "提供素材版本数量": [3],   # 对应解析出 3-1, 3-2, 3-3
+        "广告组数量": [1],        # 1:N:N 结构中的组数
+        "导品系列数": [1],        # 系列数
+        "补充默认版本数": [1]      # 需要补齐的默认版本个数
+    }
+    df = pd.DataFrame(data)
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="模块四专用模板")
     return out.getvalue()
 
 # 在主界面顶部渲染下载区域
 st.markdown("### 📥 资源下载")
-st.download_button(
-    label="⬇️ 下载：原始素材表 Excel 模板",
-    data=get_template_excel(),
-    file_name="广告素材原始表模板.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+col_t1, col_t2 = st.columns(2)
+with col_t1:
+    st.download_button(
+        label="⬇️ 下载：模块一/二/三 标准模板",
+        data=get_template_standard(),
+        file_name="标准素材模板.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+with col_t2:
+    st.download_button(
+        label="⬇️ 下载：模块四 结构补齐专用模板",
+        data=get_template_m4(),
+        file_name="模块四_结构补齐模板.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 st.markdown("---") # 分割线，区分下载区和下方的功能操作区
 
