@@ -48,7 +48,7 @@ st.markdown("---") # 分割线，区分下载区和下方的功能操作区
 
 st.sidebar.header("🎯 模块导航")
 mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本(待开发)"])
-
+st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 全局参数设置")
 
 # 1. 文件名前缀
@@ -60,7 +60,6 @@ REPEAT_1 = st.sidebar.number_input("第一次重复次数", min_value=1, value=1
 REPEAT_2 = st.sidebar.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数")
 
 # 3. 视觉与性能开关
-st.sidebar.markdown("---")
 ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
 FAST_MODE = st.sidebar.checkbox("开启极速模式", value=False)
 
@@ -74,9 +73,9 @@ params = {
 }
 
 # 第三步： 动态加载
-if mode == "模块一":
+if mode == "模块一：基础独立拆分":
     module_1.run(params)
-elif mode == "模块二":
+elif mode == "模块二：同SKU+国家聚合拆分":
     module_2.run(params)
-elif mode == "模块三":
+elif mode == "模块三：智能分组 (SKU去重)":
     module_3.run(params)
