@@ -1,14 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import sys
-import os
-
-# 路径补丁
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_path = os.path.abspath(os.path.join(current_dir, '..'))
-if root_path not in sys.path:
-    sys.path.insert(0, root_path)
 
 from utils import expand_material_versions, write_excel_final
 
