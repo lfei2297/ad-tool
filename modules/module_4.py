@@ -17,9 +17,9 @@ def run(params):
     # --- 1. 结构参数输入 ---
     st.markdown("#### 📐 系列结构设置 (1:M:N)")
     col_m, col_n = st.columns(2)
-    with col_a:
+    with col_m:
         M_groups = st.number_input("广告组数量 (M)", min_value=1, value=1, help="每个系列下的广告组数")
-    with col_b:
+    with col_n:
         N_ads = st.number_input("组内广告数 (N)", min_value=1, value=2, help="每个广告组下的广告位元数")
 
     up = st.file_uploader("📂 上传模块四专用模板", type=["xlsx"], key="m4_up")
