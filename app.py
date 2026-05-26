@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import utils  # 先导入工具类
-from modules import module_1, module_2, module_3  # 假设你已经拆分了模块
+from modules import module_1, module_2, module_3, module_4  # 假设你已经拆分了模块
 
 # 1. 页面配置
 st.set_page_config(page_title="广告素材批量生成工具", layout="wide")
@@ -61,7 +61,7 @@ REPEAT_2 = st.sidebar.number_input("第二次重复次数", min_value=1, value=1
 
 # 3. 视觉与性能开关
 ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
-FAST_MODE = st.sidebar.checkbox("开启极速模式", value=False)
+FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
 
 # 将参数封装，传给各模块使用
 params = {
@@ -79,3 +79,5 @@ elif mode == "模块二：同SKU+国家聚合拆分":
     module_2.run(params)
 elif mode == "模块三：智能分组 (SKU去重)":
     module_3.run(params)
+elif mode == "模块四：补齐默认版本(待开发)":
+    module_4.run(params)
