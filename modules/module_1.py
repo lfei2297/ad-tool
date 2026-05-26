@@ -4,6 +4,16 @@ import re
 from collections import defaultdict
 import io
 import zipfile
+import sys
+import os
+
+# ✅ 工业级写法：强制将项目根目录加入 Python 搜索路径
+# 获取当前文件的父目录的父目录（即根目录）
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if root_path not in sys.path:
+    sys.path.append(root_path)
+
+# 现在可以安全地从根目录导入 utils 了
 from utils import expand_material_versions, write_excel_final
 
 def run(params):
