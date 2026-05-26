@@ -1,17 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import sys
-import os
-
-# ✅ 强制定位补丁：将项目的根目录加入搜索路径
-# os.path.dirname(__file__) 获取当前 modules 文件夹路径
-# '..' 代表上一级目录（即根目录）
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_path = os.path.abspath(os.path.join(current_dir, '..'))
-
-if root_path not in sys.path:
-    sys.path.insert(0, root_path)
 
 # 现在可以安全地从根目录导入 utils 了
 from utils import expand_material_versions, write_excel_final
