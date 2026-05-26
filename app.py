@@ -1,21 +1,18 @@
 import streamlit as st
 import pandas as pd
 import io
-import utils  # 先导入工具类
-from modules import module_1, module_2, module_3, module_4  # 假设你已经拆分了模块
+from modules import module_1, module_2, module_3, module_4
 
-# 1. 页面配置
-st.set_page_config(page_title="广告素材批量生成工具", layout="wide")
+st.set_page_config(page_title="广告素材工具箱", layout="wide")
 st.title("🚀 广告素材批量生成工具")
 
 # ==========================
-# 📥 第一步：资源下载 (放在这里)
+# 📥 资源下载区
 # ==========================
 def get_template_standard():
-    """模块一/二/三的标准模板"""
     data = {
-        "广告账号ID": ["ACC123"], "主页ID": ["P01"], "像素ID": ["PX01"],
-        "真实SKU": ["SKU01"], "虚拟SKU": ["V01"], "国家": ["美国"],
+        "广告账号ID": [""], "主页ID": [""], "像素ID": [""],
+        "真实SKU": ["SKU01"], "虚拟SKU": [""], "国家": ["美国"],
         "着陆页版本名称": ["LP-1"], "广告素材版本名称": ["Material-1"],
         "广告素材数量": [5], "素材选取 (X-Y)": [""]
     }
@@ -26,82 +23,50 @@ def get_template_standard():
     return out.getvalue()
 
 def get_template_m4():
-    """模块四专用的结构补齐模板 - 严格表头版"""
-    # 按照您要求的顺序排列字段
     columns = [
         "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
         "国家", "着陆页版本名称", "广告素材版本名称", 
         "提供素材版本数量", "广告组数量", "导品系列数", "补充默认版本数"
     ]
     data = {
-        "广告账号ID": ["1018641536297906"],
-        "主页ID": ["391776977343478"],
-        "像素ID": ["806016751628770"],
-        "真实SKU": ["L2295705"],
-        "虚拟SKU": [""],
-        "国家": ["德国"],
-        "着陆页版本名称": ["优化组版本-OPDY-1"],
-        "广告素材版本名称": ["优化组版本-OPDY-S-2560525-3-1"],
-        "提供素材版本数量": [3],
-        "广告组数量": [1],
-        "导品系列数": [1],
-        "补充默认版本数": [1]
+        "广告账号ID": ["1018641536297906"], "主页ID": ["391776977343478"], "像素ID": ["806016751628770"],
+        "真实SKU": ["L2295705"], "虚拟SKU": [""], "国家": ["德国"], "着陆页版本名称": ["优化组版本-OPDY-1"],
+        "广告素材版本名称": ["优化组版本-OPDY-S-2560525-3-1"], "提供素材版本数量": [3],
+        "广告组数量": [1], "导品系列数": [1], "补充默认版本数": [1]
     }
-    df = pd.DataFrame(data, columns=columns) # 强制指定表头顺序
+    df = pd.DataFrame(data, columns=columns)
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="模块四专用模板")
+        df.to_excel(writer, index=False, sheet_name="模块四模板")
     return out.getvalue()
 
-# 在主界面顶部渲染下载区域
 st.markdown("### 📥 资源下载")
 col_t1, col_t2 = st.columns(2)
 with col_t1:
-    st.download_button(
-        label="⬇️ 下载：模块一/二/三 标准模板",
-        data=get_template_standard(),
-        file_name="标准素材模板.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    st.download_button("⬇️ 下载：模块一/二/三 标准模板", data=get_template_standard(), file_name="标准素材模板.xlsx")
 with col_t2:
-    st.download_button(
-        label="⬇️ 下载：模块四 结构补齐专用模板",
-        data=get_template_m4(),
-        file_name="模块四_结构补齐模板.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-st.markdown("---") # 分割线，区分下载区和下方的功能操作区
+    st.download_button("⬇️ 下载：模块四 结构补齐模板", data=get_template_m4(), file_name="模块四专用模板.xlsx")
+st.markdown("---")
 
 # ==========================
-# 第二步：侧边栏及功能模块加载
+# 🎯 侧边栏
 # ==========================
-
 st.sidebar.header("🎯 模块导航")
 mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本(待开发)"])
+
 st.sidebar.markdown("---")
-st.sidebar.header("⚙️ 全局参数设置")
-
-# 1. 文件名前缀
-FILE_PREFIX = st.sidebar.text_input("✏️ 自定义结果文件前缀", value="项目A_")
-
-# 2. 核心重复逻辑（对应之前的 REPEAT_FIRST 和 REPEAT_SECOND）
-st.sidebar.subheader("🔄 素材重复设置")
-REPEAT_1 = st.sidebar.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数")
-REPEAT_2 = st.sidebar.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数")
-
-# 3. 视觉与性能开关
+st.sidebar.header("⚙️ 全局设置")
+FILE_PREFIX = st.sidebar.text_input("✏️ 自定义文件前缀", value="项目A_")
 ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
-FAST_MODE = st.sidebar.checkbox("开启极速模式 (跳过样式渲染)", value=False)
+FAST_MODE = st.sidebar.checkbox("开启极速模式(跳过样式渲染)", value=False)
 
-# 将参数封装，传给各模块使用
+# 基础参数字典（移除了 repeat）
 params = {
     "prefix": FILE_PREFIX,
-    "repeat_1": REPEAT_1,
-    "repeat_2": REPEAT_2,
     "enable_color": ENABLE_COLOR,
     "fast_mode": FAST_MODE
 }
+
 
 # 第三步： 动态加载
 if mode == "模块一：基础独立拆分":
