@@ -6,7 +6,7 @@ from modules import module_1, module_2, module_3, module_4
 # 假设你把新工具逻辑写在 modules/asset_tool.py 里
 from modules import asset_tool 
 
-st.set_page_config(page_title="🧰 广告自动化工具箱", layout="wide")
+st.set_page_config(page_title="广告自动化工具箱", layout="wide")
 
 # 在侧边栏和正文上方都给一个清晰的标识
 st.sidebar.title("🧰 工具箱控制台")
