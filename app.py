@@ -1,14 +1,22 @@
 import streamlit as st
 import pandas as pd
 import io
+# 导入你原有的模块
 from modules import module_1, module_2, module_3, module_4
+# 假设你把新工具逻辑写在 modules/asset_tool.py 里
+from modules import asset_tool 
 
-st.set_page_config(page_title="广告素材工具箱", layout="wide")
-st.title("🚀 广告素材批量生成工具")
+st.set_page_config(page_title="广告自动化工具箱", layout="wide")
 
 # ==========================
-# 📥 资源下载区
+# 🎯 侧边栏：核心导航升级
 # ==========================
+st.sidebar.header("🚀 功能大类")
+# 将“素材生成”和“资产配置”分开，防止侧边栏太乱
+main_mode = st.sidebar.selectbox("切换工具箱", ["🎨 素材批量生成", "🔧 投放资产配置"])
+
+st.sidebar.markdown("---")
+
 def get_template_standard():
     data = {
         "广告账号ID": [""], "主页ID": [""], "像素ID": [""],
@@ -40,40 +48,62 @@ def get_template_m4():
         df.to_excel(writer, index=False, sheet_name="模块四模板")
     return out.getvalue()
 
-st.markdown("### 📥 资源下载")
-col_t1, col_t2 = st.columns(2)
-with col_t1:
-    st.download_button("⬇️ 下载：模块一/二/三 标准模板", data=get_template_standard(), file_name="标准素材模板.xlsx")
-with col_t2:
-    st.download_button("⬇️ 下载：模块四 结构补齐模板", data=get_template_m4(), file_name="模块四专用模板.xlsx")
-st.markdown("---")
+if main_mode == "🎨 素材批量生成":
+    st.title("🚀 广告素材批量生成工具")
+    
+    # --- 原有的下载区 ---
+    st.markdown("### 📥 资源下载")
+    col_t1, col_t2 = st.columns(2)
+    # ... 此处保留你原有的 get_template_standard 和 get_template_m4 代码 ...
+    with col_t1:
+        st.download_button("⬇️ 下载：模块一/二/三 标准模板", data=get_template_standard(), file_name="标准素材模板.xlsx")
+    with col_t2:
+        st.download_button("⬇️ 下载：模块四 结构补齐模板", data=get_template_m4(), file_name="模块四专用模板.xlsx")
+    st.markdown("---")
 
-# ==========================
-# 🎯 侧边栏
-# ==========================
-st.sidebar.header("🎯 模块导航")
-mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本"])
+    # --- 原有的模块导航 ---
+    st.sidebar.header("🎯 模块导航")
+    mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本"])
 
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ 全局设置")
-FILE_PREFIX = st.sidebar.text_input("✏️ 自定义文件前缀", value="项目A_")
-ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
-FAST_MODE = st.sidebar.checkbox("开启极速模式(跳过样式渲染)", value=False)
+    st.sidebar.markdown("---")
+    st.sidebar.header("⚙️ 全局设置")
+    FILE_PREFIX = st.sidebar.text_input("✏️ 自定义文件前缀", value="项目A_")
+    ENABLE_COLOR = st.sidebar.checkbox("开启颜色标记", value=True)
+    FAST_MODE = st.sidebar.checkbox("开启极速模式(跳过样式渲染)", value=False)
 
-# 基础参数字典（移除了 repeat）
-params = {
-    "prefix": FILE_PREFIX,
-    "enable_color": ENABLE_COLOR,
-    "fast_mode": FAST_MODE
-}
+    params = {"prefix": FILE_PREFIX, "enable_color": ENABLE_COLOR, "fast_mode": FAST_MODE}
 
+    # 动态加载原有素材模块
+    if mode == "模块一：基础独立拆分":
+        module_1.run(params)
+    elif mode == "模块二：同SKU+国家聚合拆分":
+        module_2.run(params)
+    elif mode == "模块三：智能分组 (SKU去重)":
+        module_3.run(params)
+    elif mode == "模块四：补齐默认版本":
+        module_4.run(params)
 
-# 第三步： 动态加载
-if mode == "模块一：基础独立拆分":
-    module_1.run(params)
-elif mode == "模块二：同SKU+国家聚合拆分":
-    module_2.run(params)
-elif mode == "模块三：智能分组 (SKU去重)":
-    module_3.run(params)
-elif mode == "模块四：补齐默认版本":
-    module_4.run(params)
+else:
+    # ==========================
+    # 🔧 新工具：投放资产配置
+    # ==========================
+    st.title("🔗 广告账号-像素自动匹配工具")
+    
+    # --- 新工具的下载区 ---
+    st.markdown("### 📥 资源下载")
+    # 这里定义一个简单的模板生成函数
+    def get_asset_template():
+        acc_df = pd.DataFrame({"资产": ["资产A"], "账号名称": ["Acc-1"], "账号ID": ["ID001"]})
+        pix_df = pd.DataFrame({"资产": ["资产A"], "像素名称": ["Pix-1"], "像素ID": ["P001"]})
+        out = io.BytesIO()
+        with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+            acc_df.to_excel(writer, index=False, sheet_name="账号表")
+            pix_df.to_excel(writer, index=False, sheet_name="像素表")
+        return out.getvalue()
+
+    st.download_button("⬇️ 下载：账号像素匹配模板", data=get_asset_template(), file_name="账号像素匹配模板.xlsx")
+    st.markdown("---")
+
+    # 调用新工具的运行逻辑
+    # 你可以把之前写的处理逻辑封装在 asset_tool.run() 里
+    asset_tool.run()
