@@ -13,13 +13,20 @@ if root_path not in sys.path:
 from utils import write_excel_final 
 
 def run(params):
-    st.subheader("🎯 模块四：补齐默认版本 (最终审计版)")
+    st.subheader("🎯 模块四：补齐默认版本 ")
+    
+    st.info("""
+    **💡 运行逻辑：**
+    - **多组模式 (M > 1)**：组间测素材。每组下的 $N$ 条广告素材相同，消耗 1 个素材版本。
+    - **单组模式 (M = 1)**：组内测素材。组内 $N$ 条广告素材各不相同，每个广告位消耗 1 个素材版本。
+    - **自动补齐**：系统根据总坑位需求自动填充“默认版本”。
+    """)
     
     # --- 1. 结构参数输入 ---
-    st.markdown("#### 📐 当前计划结构 (1:M:N)")
+    st.markdown("#### 📐 当前计划系列结构 (1:M:N)")
     col_a, col_b = st.columns(2)
     with col_a:
-        M_groups = st.number_input("网页设定组数 (M)", min_value=1, value=1)
+        M_groups = st.number_input("网页设定广告组数 (M)", min_value=1, value=1)
     with col_b:
         N_ads = st.number_input("网页设定广告数 (N)", min_value=1, value=2)
 
