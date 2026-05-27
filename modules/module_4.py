@@ -28,7 +28,7 @@ def run(params):
     with col_a:
         M_groups = st.number_input("网页设定广告组数 (M)", min_value=1, value=1)
     with col_b:
-        N_ads = st.number_input("网页设定广告数 (N)", min_value=1, value=2)
+        N_ads = st.number_input("网页设定广告数 (N)", min_value=1, value=1)
 
     up = st.file_uploader("📂 上传模块四专用模板", type=["xlsx"], key="m4_up")
     
