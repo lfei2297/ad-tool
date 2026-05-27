@@ -52,7 +52,7 @@ st.markdown("---")
 # 🎯 侧边栏
 # ==========================
 st.sidebar.header("🎯 模块导航")
-mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本(待开发)"])
+mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本"])
 
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ 全局设置")
@@ -75,5 +75,5 @@ elif mode == "模块二：同SKU+国家聚合拆分":
     module_2.run(params)
 elif mode == "模块三：智能分组 (SKU去重)":
     module_3.run(params)
-elif mode == "模块四：补齐默认版本(待开发)":
+elif mode == "模块四：补齐默认版本":
     module_4.run(params)
