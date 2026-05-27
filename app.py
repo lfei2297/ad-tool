@@ -8,12 +8,18 @@ from modules import asset_tool
 
 st.set_page_config(page_title="广告自动化工具箱", layout="wide")
 
+# 在侧边栏和正文上方都给一个清晰的标识
+st.sidebar.title("🧰 工具箱控制台")
+st.title("🧰 广告自动化工具箱") # 这样页面顶部永远有一个大标题
+
 # ==========================
 # 🎯 侧边栏：核心导航升级
 # ==========================
-st.sidebar.header("🚀 功能大类")
-# 将“素材生成”和“资产配置”分开，防止侧边栏太乱
-main_mode = st.sidebar.selectbox("切换工具箱", ["🎨 素材批量生成", "🔧 投放资产配置"])
+main_mode = st.sidebar.selectbox(
+    "请选择业务类型", 
+    ["🎨 素材批量生成", "🔧 投放资产配置"],
+    index=0 # 默认选素材
+)
 
 st.sidebar.markdown("---")
 
