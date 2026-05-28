@@ -68,7 +68,7 @@ if main_mode == "🎨 素材批量生成":
     st.markdown("---")
 
     # --- 原有的模块导航 ---
-    st.sidebar.header("🎯 模块导航")
+    st.sidebar.header("🎯 子模块导航")
     mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本"])
 
     st.sidebar.markdown("---")
@@ -91,14 +91,32 @@ if main_mode == "🎨 素材批量生成":
 
 else:
     # ==========================
-    # 🔧 新工具：投放资产配置
+    # 🔧 业务模块：投放资产配置
     # ==========================
     st.title("🔗 广告账号-像素自动匹配工具")
     
-    # --- 新工具的下载区 ---
+    # --- 侧边栏：子模块导航 ---
+    st.sidebar.header("🎯 子模块导航")
+    # 采用单选框，为以后增加更多资产工具（如主页绑定等）预留空间
+    asset_sub_mode = st.sidebar.radio(
+        "请选择功能模块", 
+        ["🔗 账号-像素自动匹配"]
+    )
+    
+    st.sidebar.markdown("---")
+    
+    # --- 侧边栏：模块简介 ---
+    st.sidebar.markdown("### 💡 模块定位")
+    st.sidebar.info(
+        "本业务模块专为资产处理设计，通过逻辑自动化取代高频人工操作，"
+        "实现资产数据的极速处理与精准对齐。 "
+    )
+
+    # --- 主界面：新工具的下载区 ---
     st.markdown("### 📥 资源下载")
-    # 这里定义一个简单的模板生成函数
+    
     def get_asset_template():
+        # 根据使用指南，确保模板包含必要列名 [cite: 62]
         acc_df = pd.DataFrame({"资产": ["资产A"], "账号名称": ["Acc-1"], "账号ID": ["ID001"]})
         pix_df = pd.DataFrame({"资产": ["资产A"], "像素名称": ["Pix-1"], "像素ID": ["P001"]})
         out = io.BytesIO()
@@ -110,6 +128,7 @@ else:
     st.download_button("⬇️ 下载：账号像素匹配模板", data=get_asset_template(), file_name="账号像素匹配模板.xlsx")
     st.markdown("---")
 
-    # 调用新工具的运行逻辑
-    # 你可以把之前写的处理逻辑封装在 asset_tool.run() 里
-    asset_tool.run()
+    # 根据侧边栏的选择动态加载子模块
+    if asset_sub_mode == "🔗 账号-像素自动匹配":
+        # 调用封装好的资产处理逻辑 [cite: 61, 62]
+        asset_tool.run()
