@@ -92,6 +92,7 @@ def run(params):
                 final_df, 
                 "15行填充结果", 
                 params, 
+                is_m3=False,
                 color_by="广告账号ID" # 👈 修改配色基准为账号
             )
             
