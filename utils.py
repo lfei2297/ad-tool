@@ -77,7 +77,7 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
                     if last_val is not None and current_val != last_val:
                         current_color_idx = (current_color_idx + 1) % len(colors)
                     
-                    fmt = workbook.add_format({'bg_color': colors[current_color_idx], 'border': 1})
+                    fmt = workbook.add_format({'bg_color': colors[current_color_idx]})
                     worksheet.set_row(row_idx + 1, None, fmt)
                     last_val = current_val
 
