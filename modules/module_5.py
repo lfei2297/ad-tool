@@ -13,17 +13,16 @@ if root_path not in sys.path:
 from utils import write_excel_final 
 
 def run(params):
-    st.subheader("🚀 模块五：15行强制循环填充")
+    st.subheader("🚀 模块五：15行强制循环填充 (按账号配色版)")
     
     st.info("""
-    **⚙️ 模块五运行逻辑：**
-    1. **目标行数**：每一行原始数据固定生成 **15行** 结果。
-    2. **素材数 = 1**：直接生成 15 行完全相同的素材版本。
-    3. **素材数 > 1**：按顺序展开，若不足 15 行则从 `-1` 开始循环重新填充，直至凑满 15 行。
-    4. **素材数 > 15**：仅取前 15 个素材版本，确保总数不超标。
+    **⚙️ 运行逻辑：**
+    - **15行强制填充**：每行原始数据固定生成 15 行结果。
+    - **素材循环**：素材不足 15 时从 -1 开始重播；超过 15 时截断。
+    - **🎨 颜色区分**：导出文件将按照 **“广告账号ID”** 进行交替着色，方便区分不同账号。
     """)
 
-    up = st.file_uploader("📂 上传模块五专用模板", type=["xlsx"], key="m5_up")
+    up = st.file_uploader("📂 上传标准模板", type=["xlsx"], key="m5_up")
     
     if up and st.button("🚀 开始生成", key="m5_btn"):
         df_raw = pd.read_excel(up, dtype=str).fillna("")
@@ -83,8 +82,19 @@ def run(params):
             final_df = final_df[[c for c in display_cols if c in final_df.columns]]
             
             st.success(f"✅ 处理完成！已按 15 行规格展开。")
+            
+            # 获取侧边栏前缀
             file_prefix = params.get("prefix", "项目_")
-            xlsx_data = write_excel_final(final_df, "15行填充结果", params)
+            
+            # ✨ 核心修改点：指定 color_by 参数为 "广告账号ID"
+            # 如果你的 utils.py 中的 write_excel_final 支持这个参数，请务必传入
+            xlsx_data = write_excel_final(
+                final_df, 
+                "15行填充结果", 
+                params, 
+                color_by="广告账号ID" # 👈 修改配色基准为账号
+            )
+            
             st.download_button(
                 f"💾 下载：{file_prefix}模块五结果", 
                 data=xlsx_data, 
