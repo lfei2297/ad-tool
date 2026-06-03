@@ -51,6 +51,11 @@ def run(params):
             
             # --- 2. 构造 15 行的素材序列 ---
             final_material_list = []
+            special_note = ""
+            
+            # ✨ 新增判断：如果提供的素材数 > 15，设置特殊备注
+            if provided_count > 15:
+                special_note = "素材数超标，仅保留前15个版本"
             
             if len(material_pool) == 1:
                 # 需求①：素材数为1，生成15个相同的
@@ -70,7 +75,7 @@ def run(params):
             for v_name in final_material_list:
                 new_row = row.copy()
                 new_row["广告素材版本名称"] = v_name
-                new_row["备注"] = "15行强制填充"
+                new_row["备注"] = special_note
                 expanded_rows.append(new_row)
                 
             all_results.append(pd.DataFrame(expanded_rows))
@@ -92,7 +97,7 @@ def run(params):
                 final_df, 
                 "15行填充结果", 
                 params, 
-                is_m3=False,
+                # is_m3=False,
                 color_by="广告账号ID" # 👈 修改配色基准为账号
             )
             
