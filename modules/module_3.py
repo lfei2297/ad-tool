@@ -45,7 +45,7 @@ def run(params):
         res_df = smart_logic(df_in, group_size, params)
         st.download_button(
             "💾 导出智能分组总表", 
-            data=write_excel_final(res_df, "分组结果", params, True), 
+            data=write_excel_final(res_df, "分组结果", params, is_m3=True), 
             file_name=f"{params.get('prefix', '项目_')}智能分组总表.xlsx"
         )
 
