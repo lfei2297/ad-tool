@@ -62,14 +62,14 @@ if main_mode == "🎨 素材批量生成":
     col_t1, col_t2 = st.columns(2)
     # ... 此处保留你原有的 get_template_standard 和 get_template_m4 代码 ...
     with col_t1:
-        st.download_button("⬇️ 下载：模块一/二/三 标准模板", data=get_template_standard(), file_name="标准素材模板.xlsx")
+        st.download_button("⬇️ 下载：模块一/二/三/五 标准模板", data=get_template_standard(), file_name="标准素材模板.xlsx")
     with col_t2:
         st.download_button("⬇️ 下载：模块四 结构补齐模板", data=get_template_m4(), file_name="模块四专用模板.xlsx")
     st.markdown("---")
 
     # --- 原有的模块导航 ---
     st.sidebar.header("🎯 子模块导航")
-    mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本"])
+    mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本", "模块五：15行强制循环填充"])
 
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ 全局设置")
@@ -88,6 +88,9 @@ if main_mode == "🎨 素材批量生成":
         module_3.run(params)
     elif mode == "模块四：补齐默认版本":
         module_4.run(params)
+    elif mode == "模块五：15行强制循环填充":
+        import modules.module_5 as module_5
+        module_5.run(params)
 
 else:
     # ==========================

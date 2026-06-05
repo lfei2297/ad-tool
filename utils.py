@@ -37,26 +37,48 @@ def expand_material_versions(row, lp_version):
         start, end = (s_m, e_m) if sel_match else (start_mat, start_mat + material_count - 1)
         return [f"{prefix}{i}" for i in range(start, end + 1)]
 
-def write_excel_final(df, sheet_name, params, is_m3=False):
+def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
     """统一清洗、格式化并导出 Excel"""
+    # 1. 基础清理
     cols_to_del = ["广告素材数量", "素材选取 (X-Y)", "素材选取"]
-    df_out = df.drop(columns=[c for c in cols_to_del if c in df.columns])
+    df_out = df.drop(columns=[c for c in cols_to_del if c in df.columns]).copy()
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df_out.to_excel(writer, index=False, sheet_name=sheet_name)
+        
         if not params['fast_mode']:
             workbook, worksheet = writer.book, writer.sheets[sheet_name]
+            
+            # 设置列宽
             for i, col in enumerate(df_out.columns):
                 worksheet.set_column(i, i, max(len(str(col)), 15))
+            
             if params['enable_color']:
                 colors = ["#FFF2CC", "#E2EFDA", "#DDEBF7", "#F8CBAD", "#E4DFEC", "#D9D9D9", "#EBF1DE"]
-                color_map = {}
-                color_col = "分组" if is_m3 else "_ck"
-                if not is_m3: df_out["_ck"] = df_out["真实SKU"].astype(str) + df_out["虚拟SKU"].astype(str)
-                keys = df_out[color_col].unique()
-                for i, k in enumerate(keys): color_map[k] = colors[i % len(colors)]
-                for r in range(len(df_out)):
-                    fmt = workbook.add_format({"bg_color": color_map[df_out.iloc[r][color_col]]})
-                    worksheet.set_row(r+1, None, fmt)
+                
+                # --- ✨ 决定着色基准列 ---
+                if color_by and color_by in df_out.columns:
+                    target_col = color_by  # 模块五会走这里：按账号
+                elif is_m3 and "分组" in df_out.columns:
+                    target_col = "分组"    # 模块三会走这里：按分组
+                else:
+                    # 默认逻辑：按 SKU 组合
+                    df_out["_color_key"] = df_out["真实SKU"].astype(str) + df_out["虚拟SKU"].astype(str)
+                    target_col = "_color_key"
+
+                # --- 执行着色 ---
+                current_color_idx = 0
+                last_val = None
+                
+                for row_idx in range(len(df_out)):
+                    current_val = df_out.iloc[row_idx][target_col]
+                    # 如果这一行的值和上一行不一样，就换颜色
+                    if last_val is not None and current_val != last_val:
+                        current_color_idx = (current_color_idx + 1) % len(colors)
+                    
+                    fmt = workbook.add_format({'bg_color': colors[current_color_idx]})
+                    worksheet.set_row(row_idx + 1, None, fmt)
+                    last_val = current_val
+
     return output.getvalue()
