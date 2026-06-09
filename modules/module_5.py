@@ -63,7 +63,7 @@ def run(params):
                         return int(float(s)) if s else default
                     except: return default
 
-                provided_count = safe_int(row.get("提供素材版本数量", 0))
+                provided_count = safe_int(row.get("广告素材数量", 0))
                 base_name = str(row.get("广告素材版本名称", "素材"))
                 clean_name = re.sub(r'-\d+$', '', base_name)
                 
@@ -117,7 +117,7 @@ def run(params):
                         return int(float(s)) if s else default
                     except: return default
 
-                provided_count = safe_int(row.get("提供素材版本数量", 0))
+                provided_count = safe_int(row.get("广告素材数量", 0))
                 base_name = str(row.get("广告素材版本名称", "素材"))
                 clean_name = re.sub(r'-\d+$', '', base_name)
                 
