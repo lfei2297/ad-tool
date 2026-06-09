@@ -15,7 +15,7 @@ if root_path not in sys.path:
 from utils import write_excel_final 
 
 def run(params):
-    st.subheader("🚀 模块五：通用素材循环填充与品内分流中心")
+    st.subheader("🚀 模块五：通用素材循环填充与分流")
     
     # --- 1. 核心参数配置 ---
     st.markdown("#### ⚙️ 核心参数配置")
