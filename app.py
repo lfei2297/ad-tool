@@ -69,7 +69,7 @@ if main_mode == "🎨 素材批量生成":
 
     # --- 原有的模块导航 ---
     st.sidebar.header("🎯 子模块导航")
-    mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本", "模块五：通用素材循环填充与分流"])
+    mode = st.sidebar.radio("请选择功能模块", ["模块一：基础独立拆分", "模块二：同SKU+国家聚合拆分", "模块三：智能分组 (SKU去重)", "模块四：补齐默认版本", "模块五：循环填充与分流"])
 
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ 全局设置")
@@ -88,7 +88,7 @@ if main_mode == "🎨 素材批量生成":
         module_3.run(params)
     elif mode == "模块四：补齐默认版本":
         module_4.run(params)
-    elif mode == "模块五：通用素材循环填充与分流":
+    elif mode == "模块五：循环填充与分流":
         import modules.module_5 as module_5
         module_5.run(params)
 
