@@ -9,7 +9,7 @@ from utils import expand_material_versions, write_excel_final
 def run(params):
     st.subheader("🛠️ 模块一：基础独立拆分")
     
-    # ✨ 挪到这里的重复设置
+    # --- 🔄 素材重复设置 ---
     st.markdown("#### 🔄 素材重复设置")
     col1, col2 = st.columns(2)
     with col1:
@@ -47,13 +47,47 @@ def run(params):
             all_exp.append(tmp)
             file_groups[f"素材数_{len(vs)}"].append(tmp)
 
-        tasks["总表"] = pd.concat(all_exp, ignore_index=True)
+        # 汇聚总表与子表数据
+        df_total = pd.concat(all_exp, ignore_index=True)
+        tasks["总表"] = df_total
         for k, v in file_groups.items():
             tasks[k] = pd.concat(v, ignore_index=True)
 
+        # --- ✨ 核心新增：单独为“总表”生成一份独立 Excel 数据 ---
+        total_excel_data = write_excel_final(df_total, "Data", params)
+
+        # 构建全套压缩包数据
         zip_b = io.BytesIO()
         with zipfile.ZipFile(zip_b, "w") as zf:
             for n, d in tasks.items():
-                zf.writestr(f"{params['prefix']}{n}.xlsx", write_excel_final(d, "Data", params))
+                # 复用已有逻辑压入压缩包
+                if n == "总表":
+                    zf.writestr(f"{params['prefix']}{n}.xlsx", total_excel_data)
+                else:
+                    zf.writestr(f"{params['prefix']}{n}.xlsx", write_excel_final(d, "Data", params))
         
-        st.download_button("📦 下载处理结果包", data=zip_b.getvalue(), file_name=f"{params['prefix']}结果.zip")
+        st.success("✨ 数据处理成功！请选择下方合适的方式下载：")
+        st.markdown("---")
+
+        # --- 📐 按钮横向排版：独立总表与压缩包并存 ---
+        dl_col1, dl_col2 = st.columns(2)
+        
+        with dl_col1:
+            # 新增按钮：单独直出下载大总表
+            st.download_button(
+                label="📊 💾 单独下载：完整大总表 (Excel)", 
+                data=total_excel_data, 
+                file_name=f"{params['prefix']}总表.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="m1_single_total_btn"
+            )
+            
+        with dl_col2:
+            # 原有按钮：下载全套压缩包
+            st.download_button(
+                label="📦 💾 下载全套：结果文件包 (ZIP)", 
+                data=zip_b.getvalue(), 
+                file_name=f"{params['prefix']}结果.zip",
+                mime="application/zip",
+                key="m1_zip_package_btn"
+            )
