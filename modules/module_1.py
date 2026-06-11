@@ -13,9 +13,9 @@ def run(params):
     st.markdown("#### 🔄 素材重复设置")
     col1, col2 = st.columns(2)
     with col1:
-        repeat_1 = st.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数")
+        repeat_1 = st.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数，可以看作广告组数，例如1:30:N的情况下重复次数就是30")
     with col2:
-        repeat_2 = st.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数")
+        repeat_2 = st.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数，即原表中这一行品需要导入的系列数")
     
     # 更新局部参数
     params['repeat_1'] = repeat_1
@@ -75,7 +75,7 @@ def run(params):
         with dl_col1:
             # 新增按钮：单独直出下载大总表
             st.download_button(
-                label="📊 💾 单独下载：完整大总表 (Excel)", 
+                label="📊 💾 单独下载：完整总表 (Excel)", 
                 data=total_excel_data, 
                 file_name=f"{params['prefix']}总表.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
