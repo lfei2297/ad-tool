@@ -44,7 +44,7 @@ def run(params):
         res_df = smart_logic(df_in, group_size, params)
         st.download_button(
             "💾 导出智能分组总表", 
-            data=write_excel_final(res_df, "分组结果", params, is_m3=True), # 👈 确保激活按分组列变色
+            data=write_excel_final(res_df, "分组结果", params, is_m3=True), 
             file_name=f"{params.get('prefix', '项目_')}智能分组总表.xlsx"
         )
 
@@ -78,7 +78,7 @@ def smart_logic(df, size, params):
     
     records = df_clean.to_dict('records')
     
-    # ✨ 核心重构：buckets 内部包含数据列表 data 和独立 SKU 查重集合 skus
+    # ✨ 重构桶结构：解耦内存引用，并引入高速集合 Set 查重机制
     buckets = []
     
     for rec in records:
@@ -89,16 +89,16 @@ def smart_logic(df, size, params):
         for bucket in buckets:
             # 桶未满 且 该 SKU 还没在这个桶里
             if len(bucket['data']) < size and sku_id not in bucket['skus']:
-                # ✨ 核心修复：存入时执行 .copy() 斩断字典对象指针引用！
+                # ✨ 核心修复：追加副本 rec.copy()，切断指针
                 bucket['data'].append(rec.copy())
                 bucket['skus'].add(sku_id)
                 placed = True
                 break
                 
         if not placed:
-            # ✨ 核心修复：建新桶时同样执行 .copy() 保持独立内存
+            # ✨ 核心修复：新建桶时也使用 rec.copy() 保持独立
             buckets.append({
-                'data': [rec.copy()], 
+                'data': [rec.copy()],
                 'skus': {sku_id}
             })
         
@@ -109,13 +109,16 @@ def smart_logic(df, size, params):
         status_text = "满足要求" if g_len == size else "不满足"
         
         for r in bucket['data']:
-            # 此时 r 已经是内存独立的字典，修改标签绝不会影响其他桶
+            # 此时各个 r 已经在内存中相互隔离，打标签再也不会相互覆盖了！
             r["分组"] = f"分组{g_id}"
             r["分组数量"] = f"{g_id}_{g_len}"
             r["备注"] = status_text
             final.append(r)
             
     res_df = pd.DataFrame(final)
+    
+    # 导出前顺手把多余的 ident 列删掉，还运营一份干净的表格
     if "ident" in res_df.columns:
         res_df = res_df.drop(columns=["ident"])
+        
     return res_df
