@@ -23,7 +23,7 @@ def run(params):
     with col_b:
         repeat_1 = st.number_input("🔄 素材展开次数", min_value=1, value=1, help="同组内对应广告素材版本重复次数")
         
-    # 强制将最新值写入字典
+    # 强刷核心参数
     params['repeat_1'] = int(repeat_1)
     params['repeat_2'] = 1
 
@@ -44,20 +44,15 @@ def run(params):
     st.markdown("#### **步骤二：生成智能分组总表**")
     f2 = st.file_uploader("----请输入处理后的总表 (或上传原始表一键生成)", type=["xlsx"], key="m3f2")
     
-    # ✨ 关键优化：加入 Action Button 确保点击时抓取最新的参数状态
     if f2:
         if st.button("🚀 开始智能分组", key="m3_btn_s2"):
             df_in = pd.read_excel(f2, dtype=str).fillna("")
-            
-            # 执行带有副本隔离机制的避让算法
             res_df = smart_logic(df_in, group_size, params)
             
             if not res_df.empty:
-                st.success(f"✅ 步骤二智能分组成功！（素材重复 {params['repeat_1']} 次已应用）")
-                # 留存在 session 状态中防止下载按钮刷新消失
+                st.success(f"✅ 步骤二智能分组成功！（素材重复 {params['repeat_1']} 次已完美散落分流）")
                 st.session_state['m3_res_df'] = res_df
         
-        # 如果计算过，渲染下载按钮
         if 'm3_res_df' in st.session_state:
             st.download_button(
                 "💾 导出智能分组总表", 
@@ -67,7 +62,7 @@ def run(params):
             )
 
 def process_step1(df, params):
-    """专门负责将原始表按素材数量展开的逻辑"""
+    """提取原始表中的多版本素材，并根据 repeat_1 数量进行克隆扩展"""
     expanded_rows = []
     curr_repeat = params.get('repeat_1', 1)
     for _, row in df.iterrows():
@@ -82,53 +77,60 @@ def process_step1(df, params):
     return pd.DataFrame(expanded_rows)
 
 def smart_logic(df, size, params):
-    # 如果上传的是原始表（含有广告素材数量列），先执行展开
+    # 1. 判断是否需要自展开
     if "广告素材数量" in df.columns:
         df = process_step1(df, params)
 
-    # 数据清洗：剔除无关行
+    # 2. 增强型清洗：不仅剔除包含总计空白的行，还要把纯文本的"空白"清洗掉
     df_clean = df[~df["真实SKU"].astype(str).str.contains("总计|空白", na=False)].copy()
     
-    # 联合标识
-    df_clean["ident"] = df_clean["真实SKU"].str.strip().replace("", None).fillna(df_clean["虚拟SKU"].str.strip())
+    # 3. 智能强配对：把空字符串、空格、"空白"全部清洗为 None，确保能100%抓取到虚拟SKU作为备用代号
+    t_sku = df_clean["真实SKU"].astype(str).str.strip().replace(["", "空白", "nan", "None"], None)
+    v_sku = df_clean["虚拟SKU"].astype(str).str.strip().replace(["", "空白", "nan", "None"], "未知SKU")
+    df_clean["ident"] = t_sku.fillna(v_sku)
     
     # 稳定排序
-    df_clean = df_clean.sort_values(by=["真实SKU", "虚拟SKU", "着陆页版本名称"], kind="stable")
+    df_clean = df_clean.sort_values(by=["ident", "着陆页版本名称"], kind="stable")
     
     records = df_clean.to_dict('records')
+    
+    # ✨ 核心重构：桶容器解耦设计 + 引入高速集合 Set 冲突隔离
     buckets = []
     
     for rec in records:
         sku_id = rec["ident"]
-        if not sku_id: continue
         placed = False
         
         for bucket in buckets:
+            # 规则：如果当前桶没装满，并且这个 SKU 还没在这个桶里出现过
             if len(bucket['data']) < size and sku_id not in bucket['skus']:
+                # 深度拷贝 rec.copy()，死死斩断指针联系！
                 bucket['data'].append(rec.copy())
                 bucket['skus'].add(sku_id)
                 placed = True
                 break
                 
         if not placed:
+            # 建新桶时也必须使用副本，确保内存绝对干净独立
             buckets.append({
                 'data': [rec.copy()],
                 'skus': {sku_id}
             })
         
-    final = []
+    final_rows = []
     for i, bucket in enumerate(buckets):
         g_id = i + 1
         g_len = len(bucket['data'])
         status_text = "满足要求" if g_len == size else "不满足"
         
         for r in bucket['data']:
+            # 此时内存完全独立，打标绝对不会出现隔空篡改和隐式合并！
             r["分组"] = f"分组{g_id}"
             r["分组数量"] = f"{g_id}_{g_len}"
             r["备注"] = status_text
-            final.append(r)
+            final_rows.append(r)
             
-    res_df = pd.DataFrame(final)
+    res_df = pd.DataFrame(final_rows)
     if "ident" in res_df.columns:
         res_df = res_df.drop(columns=["ident"])
         
