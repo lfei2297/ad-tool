@@ -5,37 +5,47 @@ import io
 def natural_sort_key(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split('([0-9]+)', str(s))]
 
-def expand_material_versions(row, lp_version):
-    """通用版本解析逻辑"""
-    base_name = str(row.get("广告素材版本名称", "")).strip()
+def expand_material_versions(row, lp_v=""):
+    """
+    精准解析带有多连字符的素材名称，并根据广告素材数量进行尾部数字严格递增。
+    例如：'优化组版本-OPDY-S-260630-1-10', 数量 2
+    生成：['优化组版本-OPDY-S-260630-1-10', '优化组版本-OPDY-S-260630-1-11']
+    """
+    import re
+    
+    # 1. 获取原始素材名称与数量
+    base_name = str(row.get("广告素材版本名称", "素材")).strip()
     try:
-        material_count = int(row["广告素材数量"]) if row["广告素材数量"] else 1
+        # 优先读取表格中的素材数量，取不到或不合法则兜底为 1
+        provided_count = int(float(str(row.get("广告素材数量", 1)).strip()))
     except:
-        material_count = 1
-    material_select = str(row.get("素材选取", "") or row.get("素材选取 (X-Y)", "")).strip()
-    sel_match = re.search(r'(\d+)-(\d+)', material_select)
-    s_m, e_m = (int(sel_match.group(1)), int(sel_match.group(2))) if sel_match else (0,0)
+        provided_count = 1
+        
+    if provided_count <= 1:
+        return [base_name]
 
-    m_two = re.search(r'-(\d{2})$', base_name)
-    m_hyphen = re.search(r'-(\d+)-(\d+)$', base_name)
-
-    if m_two:
-        suffix = m_two.group(1)
-        g_n, s_mat = suffix[0], int(suffix[1])
-        new_prefix = f"{base_name[:m_two.start()]}-{g_n}-{lp_version}-" if lp_version else f"{base_name[:m_two.start()]}-{g_n}-"
-        start, end = (s_m, e_m) if sel_match else (s_mat, s_mat + material_count - 1)
-        return [f"{new_prefix}{i}" for i in range(start, end + 1)]
-    elif m_hyphen:
-        g_p, s_mat = m_hyphen.group(1), int(m_hyphen.group(2))
-        new_prefix = f"{base_name[:m_hyphen.start()]}-{g_p}-"
-        start, end = (s_m, e_m) if sel_match else (s_mat, s_mat + material_count - 1)
-        return [f"{new_prefix}{i}" for i in range(start, end + 1)]
+    # 2. 精准匹配最后一个连字符及后面的数字
+    # text: "优化组版本-OPDY-S-260630-1-10"
+    # match.group(1) -> "优化组版本-OPDY-S-260630-1"
+    # match.group(2) -> "10"
+    match = re.match(r"^(.*)-(\d+)$", base_name)
+    
+    if match:
+        clean_prefix = match.group(1)   # 不带末尾连字符的前缀
+        start_num_str = match.group(2)  # 尾部的初始数字字符串
+        start_num = int(start_num_str)  # 转为整数用于递增
+        padding_len = len(start_num_str) # 保持原有的数字位数（如 01, 02 保持两位）
+        
+        versions = []
+        for i in range(provided_count):
+            current_num = start_num + i
+            # 使用 zfill 保持原本的数字前导零（例如 10 变成 11，如果是 09 则变成 10）
+            formatted_num = str(current_num).zfill(padding_len)
+            versions.append(f"{clean_prefix}-{formatted_num}")
+        return versions
     else:
-        m_s = re.search(r'-(\d+)$', base_name)
-        start_mat = int(m_s.group(1)) if m_s else 1
-        prefix = base_name[:m_s.start()] + "-" if m_s else base_name + "-"
-        start, end = (s_m, e_m) if sel_match else (start_mat, start_mat + material_count - 1)
-        return [f"{prefix}{i}" for i in range(start, end + 1)]
+        # 如果根本没有连字符加数字结尾（如直接叫 "Material"），则走常规编号形式
+        return [f"{base_name}-{i}" for i in range(1, provided_count + 1)]
 
 def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
     """统一清洗、格式化并导出 Excel"""
