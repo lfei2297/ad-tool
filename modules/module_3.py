@@ -21,7 +21,7 @@ def run(params):
     with col_a:
         group_size = st.number_input("📦 分组规模", min_value=1, value=30)
     with col_b:
-        repeat_1 = st.number_input("🔄 素材展开次数", min_value=1, value=1, help="同组内对应广告素材版本重复次数")
+        repeat_1 = st.number_input("🔄 素材展开次数", min_value=1, value=1, help="广告素材版本重复次数")
         params['repeat_1'] = repeat_1
         params['repeat_2'] = 1
 
@@ -66,8 +66,10 @@ def process_step1(df, params):
     return pd.DataFrame(expanded_rows)
 
 def smart_logic(df, size, params):
-    # 如果上传的是原始表（含有广告素材数量列），先执行展开
-    if "广告素材数量" in df.columns:
+    # ✨✨✨【核心修正点】✨✨✨
+    # 只要用户在前台设置了重复次数 > 1，或者表格里带有素材数量列，都强制进行展开重复！
+    # 这样就算你没写“广告素材数量”列，只要重复次数填了 3，它也会乖乖去复制展开。
+    if "广告素材数量" in df.columns or params.get('repeat_1', 1) > 1:
         df = process_step1(df, params)
 
     # 数据清洗：剔除无关行
@@ -90,11 +92,12 @@ def smart_logic(df, size, params):
         for bucket in buckets:
             # 桶未满 且 该 SKU 还没在这个桶里
             if len(bucket) < size and sku_id not in [r["ident"] for r in bucket]:
-                bucket.append(rec)
+                # ✨ 顺手加上浅拷贝保护，防止单行无素材数量时的指针覆盖
+                bucket.append(rec.copy())
                 placed = True
                 break
         if not placed:
-            buckets.append([rec])
+            buckets.append([rec.copy()])
         
     final = []
     for i, b in enumerate(buckets):
