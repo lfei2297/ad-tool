@@ -29,6 +29,9 @@ def run(params):
     f1 = st.file_uploader("----请上传原始表格", type=["xlsx"], key="m3f1")
     if f1:
         raw = pd.read_excel(f1, dtype=str).fillna("")
+
+        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
+        raw = raw[~raw.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
         # ✨ 修正：确保传入了正确的处理结果
         step1_data = process_step1(raw, params)
         st.download_button(
@@ -42,6 +45,8 @@ def run(params):
     f2 = st.file_uploader("----请输入处理后的总表 (或上传原始表一键生成)", type=["xlsx"], key="m3f2")
     if f2:
         df_in = pd.read_excel(f2, dtype=str).fillna("")
+        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
+        df_in = df_in[~df_in.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
         res_df = smart_logic(df_in, group_size, params)
         st.download_button(
             "💾 导出智能分组总表", 
