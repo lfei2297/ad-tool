@@ -25,33 +25,85 @@ st.sidebar.markdown("---")
 
 def get_template_standard():
     data = {
-        "广告账号ID": [""], "主页ID": [""], "像素ID": [""],
-        "真实SKU": ["SKU01"], "虚拟SKU": [""], "国家": ["美国"],
-        "着陆页版本名称": ["LP-1"], "广告素材版本名称": ["Material-1"],
-        "广告素材数量": [5], "素材选取 (X-Y)": [""]
+        "广告账号ID": [""], "主页ID": ["可不填，不填则使用资产管理中的默认主页"], "像素ID": ["可不填，不填则使用资产管理中的默认像素"],
+        "真实SKU": ["填了真实SKU就不能填虚拟SKU"], "虚拟SKU": ["填了虚拟SKU就不能填真实SKU"], "国家": ["美国/英国/德国/法国/西班牙"],
+        "着陆页版本名称": ["着陆页库中的具体版本名称"], "广告素材版本名称": ["广告素材库中的具体版本名称"],
+        "广告素材数量": [5], "素材选取 (X-Y)": ["指定素材区间填写，无指定可不填"], "出价/竞价": ["如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，可不填，最多2位小数，不填则全不填，填了则全填"],
+        "注意事项": ["此行为说明，勿删除，请从第三行开始填写"]
     }
     df = pd.DataFrame(data)
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="标准模板")
+        
+        workbook = writer.book
+        worksheet = writer.sheets["标准模板"]
+        
+        worksheet.protect() 
+        
+        unlocked_fmt = workbook.add_format({'locked': False}) 
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'locked': True})
+        warning_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True, 'locked': True})
+        
+        # --- ✨ 核心改法 ---
+        # 1. 预先将第 1 列到第 100 列全部设为“未锁定”（你可以随意在右侧空白区加列）
+        worksheet.set_column(0, 100, 18, unlocked_fmt)
+        
+        for i, col_name in enumerate(df.columns):
+            # 调整已有列的宽度
+            col_width = max(len(str(col_name)) * 2, 18)
+            worksheet.set_column(i, i, col_width, unlocked_fmt)
+            
+            # 2. 仅“针对性地”把原模板区域内的表头和说明行焊死
+            worksheet.write(0, i, col_name, header_fmt)
+            worksheet.write(1, i, str(df.iloc[0, i]), warning_fmt)
+            
+        worksheet.set_row(1, 25) 
+        # 3. 已经删除了冻结窗格（freeze_panes）的代码
+            
     return out.getvalue()
 
 def get_template_m4():
     columns = [
         "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
         "国家", "着陆页版本名称", "广告素材版本名称", 
-        "提供素材版本数量", "广告组数量", "导品系列数", "补充默认版本数"
+        "提供素材版本数量", "广告组数量", "导品系列数", "补充默认版本数", "出价/竞价",
+        "注意事项"
     ]
     data = {
-        "广告账号ID": ["1018641536297906"], "主页ID": ["391776977343478"], "像素ID": ["806016751628770"],
-        "真实SKU": ["L2295705"], "虚拟SKU": [""], "国家": ["德国"], "着陆页版本名称": ["优化组版本-OPDY-1"],
-        "广告素材版本名称": ["优化组版本-OPDY-S-2560525-3-1"], "提供素材版本数量": [3],
-        "广告组数量": [1], "导品系列数": [1], "补充默认版本数": [1]
+        "广告账号ID": [""], "主页ID": ["可不填，不填则使用资产管理中的默认主页"], "像素ID": ["可不填，不填则使用资产管理中的默认像素"],
+        "真实SKU": ["填了真实SKU就不能填虚拟SKU"], "虚拟SKU": ["填了虚拟SKU就不能填真实SKU"], "国家": ["美国/英国/德国/法国/西班牙"], "着陆页版本名称": ["着陆页库中的具体版本名称"],
+        "广告素材版本名称": ["广告素材库中的具体版本名称"], "提供素材版本数量": [3],
+        "广告组数量": [1], "导品系列数": [1], "补充默认版本数": [1], "出价/竞价": ["如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填"],
+        "注意事项": ["此行为说明，勿删除，请从第三行开始填写"]
     }
     df = pd.DataFrame(data, columns=columns)
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="模块四模板")
+        
+        workbook = writer.book
+        worksheet = writer.sheets["模块四模板"]
+        
+        worksheet.protect() 
+        
+        unlocked_fmt = workbook.add_format({'locked': False}) 
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'locked': True})
+        warning_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True, 'locked': True})
+        
+        # --- ✨ 核心改法 ---
+        worksheet.set_column(0, 100, 18, unlocked_fmt)
+        
+        for i, col_name in enumerate(df.columns):
+            col_width = max(len(str(col_name)) * 2, 18)
+            worksheet.set_column(i, i, col_width, unlocked_fmt)
+            
+            worksheet.write(0, i, col_name, header_fmt)
+            worksheet.write(1, i, str(df.iloc[0, i]), warning_fmt)
+            
+        worksheet.set_row(1, 25) 
+        # 已删除 freeze_panes
+            
     return out.getvalue()
 
 if main_mode == "🎨 素材批量生成":
