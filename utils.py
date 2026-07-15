@@ -49,10 +49,39 @@ def expand_material_versions(row, lp_v=""):
 
 def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
     """统一清洗、格式化并导出 Excel"""
-    # 1. 基础清理
+    import io
+    
     cols_to_del = ["广告素材数量", "素材选取 (X-Y)", "素材选取"]
     df_out = df.drop(columns=[c for c in cols_to_del if c in df.columns]).copy()
     
+    target_order = [
+        "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
+        "国家", "着陆页版本名称", "广告素材版本名称", "出价/竞价"
+    ]
+    ordered_cols = [c for c in target_order if c in df_out.columns]
+    other_cols = [c for c in df_out.columns if c not in target_order]
+    df_out = df_out[ordered_cols + other_cols]
+
+    # ==========================================
+    # ✨ 核心极简改法：在最终出口统一拼装说明行
+    # ==========================================
+    hints = {
+        "主页ID": "可不填，不填则使用资产管理中的默认主页",
+        "像素ID": "可不填，不填则使用资产管理中的默认像素",
+        "真实SKU": "填了真实SKU就不能填虚拟SKU",
+        "虚拟SKU": "填了虚拟SKU就不能填真实SKU",
+        "国家": "美国/英国/德国/法国/西班牙",
+        "着陆页版本名称": "着陆页库中的具体版本名称",
+        "广告素材版本名称": "广告素材库中的具体版本名称",
+        "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
+        "注意事项": "此行为说明，勿删除，请从第三行开始填写"
+    }
+    # 动态匹配当前表格的列，生成一行字典
+    hint_row = pd.DataFrame([{c: hints.get(c, "") for c in df_out.columns}])
+    # 把说明行顶在最上面
+    df_out = pd.concat([hint_row, df_out], ignore_index=True)
+    # ==========================================
+
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df_out.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -60,30 +89,31 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
         if not params['fast_mode']:
             workbook, worksheet = writer.book, writer.sheets[sheet_name]
             
-            # 设置列宽
             for i, col in enumerate(df_out.columns):
                 worksheet.set_column(i, i, max(len(str(col)), 15))
             
             if params['enable_color']:
                 colors = ["#FFF2CC", "#E2EFDA", "#DDEBF7", "#F8CBAD", "#E4DFEC", "#D9D9D9", "#EBF1DE"]
                 
-                # --- ✨ 决定着色基准列 ---
                 if color_by and color_by in df_out.columns:
-                    target_col = color_by  # 模块五会走这里：按账号
+                    target_col = color_by
                 elif is_m3 and "分组" in df_out.columns:
-                    target_col = "分组"    # 模块三会走这里：按分组
+                    target_col = "分组"
                 else:
-                    # 默认逻辑：按 SKU 组合
                     df_out["_color_key"] = df_out["真实SKU"].astype(str) + df_out["虚拟SKU"].astype(str)
                     target_col = "_color_key"
 
-                # --- 执行着色 ---
                 current_color_idx = 0
                 last_val = None
                 
                 for row_idx in range(len(df_out)):
-                    current_val = df_out.iloc[row_idx][target_col]
-                    # 如果这一行的值和上一行不一样，就换颜色
+                    # ✨ 给说明行单独上个“醒目”的颜色（灰底红字）
+                    if row_idx == 0:
+                        hint_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True})
+                        worksheet.set_row(row_idx + 1, 25, hint_fmt) # ✨ 25 是行高，显得更宽敞
+                        continue
+                        
+                    current_val = df_out.iloc[row_idx].get(target_col, "")
                     if last_val is not None and current_val != last_val:
                         current_color_idx = (current_color_idx + 1) % len(colors)
                     
