@@ -44,6 +44,8 @@ def run(params):
     
     if up and st.button("🚀 开始校验并生成", key="m4_btn"):
         df_raw = pd.read_excel(up, dtype=str).fillna("")
+        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
+        df_raw = df_raw[~df_raw.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
         all_results = []
         warning_logs = []
 
@@ -110,8 +112,10 @@ def run(params):
         
         if all_results:
             final_df = pd.concat(all_results, ignore_index=True)
-            display_cols = ["广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "备注"]
-            final_df = final_df[[c for c in display_cols if c in final_df.columns]]
+            
+            # ✨ 新增：黑名单剔除逻辑，专杀辅助列
+            cols_to_hide = ["提供素材版本数量", "广告组数量", "导品系列数", "补充默认版本数"]
+            final_df = final_df.drop(columns=[c for c in cols_to_hide if c in final_df.columns])
             
             st.success("✅ 生成完毕！")
             file_prefix = params.get("prefix", "项目_")

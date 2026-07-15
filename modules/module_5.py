@@ -20,7 +20,6 @@ def run(params):
     # --- 1. 核心参数配置 ---
     st.markdown("#### ⚙️ 核心参数配置")
     
-    # 先渲染模式选择框，并为其指定唯一的 key
     run_mode = st.radio(
         "🎨 导出与拆分模式",
         ["模式A：生成独立总表", "模式B：生成总表并动态平摊拆分"],
@@ -28,14 +27,12 @@ def run(params):
         help="模式A会把所有品的数据合在一个大表里导出；模式B会把每个品生成的素材完美平摊到你指定的几张表里，并打包成 ZIP 下载。"
     )
 
-    # ✨ 核心创新点：根据选择的模式，动态给出行数的初始默认值
     default_rows = 15 if "模式A" in run_mode else 20
 
-    # 渲染总行数输入框，value 绑定动态算好的默认值
     target_total_rows = st.number_input(
         "📊 每个品生成总行数", 
         min_value=1, 
-        value=default_rows, # 👈 动态初始值绑定在这里
+        value=default_rows, 
         help="每个独立的产品（行）最终要被扩充撑满的行数。模式A默认15，模式B默认20。"
     )
 
@@ -51,7 +48,6 @@ def run(params):
             help="例如希望将素材均匀分流到几张新表里，此处直接填数字即可。"
         )
         
-        # 实时平摊预览算法
         base_step = int(target_total_rows // sub_table_count)
         rem = int(target_total_rows % sub_table_count)
         if rem == 0:
@@ -64,14 +60,15 @@ def run(params):
     
     if up and st.button("🚀 开始自动化构建", key="m5_btn"):
         df_raw = pd.read_excel(up, dtype=str).fillna("")
+        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
+        df_raw = df_raw[~df_raw.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
         
-        display_cols = ["广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "备注"]
+        # ✨ 删除掉了原来写死在这里的 display_cols 白名单
         file_prefix = params.get("prefix", "项目_")
         
         total_expanded_rows = []
         buckets = {i: [] for i in range(1, int(sub_table_count) + 1)}
         
-        # 建立动态平摊的基础步长
         base_step = int(target_total_rows // sub_table_count)
         rem = int(target_total_rows % sub_table_count)
         sku_split_lens = [base_step + (1 if i < rem else 0) for i in range(int(sub_table_count))]
@@ -130,8 +127,8 @@ def run(params):
                 total_expanded_rows.append(new_row)
 
         if total_expanded_rows:
+            # ✨ 这里直接压制成 DataFrame，不再强制过滤列名
             master_df = pd.DataFrame(total_expanded_rows)
-            master_df = master_df[[c for c in display_cols if c in master_df.columns]]
 
             # =====================================================================
             # 分流执行：模式A（直出总大表）
@@ -161,8 +158,8 @@ def run(params):
                     accumulated_rows = 0
                     for b_id in sorted(buckets.keys()):
                         sliced_rows = buckets[b_id]
+                        # ✨ 子表也直接转 DataFrame，去除了过滤步骤
                         sliced_df = pd.DataFrame(sliced_rows)
-                        sliced_df = sliced_df[[c for c in display_cols if c in sliced_df.columns]]
                         
                         current_len = sku_split_lens[b_id - 1]
                         start_row_num = accumulated_rows + 1

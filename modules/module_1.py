@@ -25,6 +25,8 @@ def run(params):
     
     if up and st.button("🚀 开始处理"):
         df_raw = pd.read_excel(up, dtype=str).fillna("")
+        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
+        df_raw = df_raw[~df_raw.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
         tasks = {}
         all_exp = []
         file_groups = defaultdict(list)
