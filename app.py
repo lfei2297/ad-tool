@@ -8,6 +8,50 @@ from modules import asset_tool
 
 st.set_page_config(page_title="广告自动化工具箱", layout="wide")
 
+# ==========================================
+# ✨ 终极视觉优化：注入极致紧凑前端样式
+# ==========================================
+st.markdown("""
+    <style>
+        /* 1. 彻底根绝顶部空白（收窄图4红框处的头部大空位） */
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+            padding-left: 3rem !important;
+            padding-right: 3rem !important;
+        }
+        
+        /* 2. 收窄侧边栏顶部空白（配合图4的侧边栏头部） */
+        [data-testid="stSidebarUserContent"] {
+            padding-top: 1.5rem !important;
+        }
+
+        /* 3. 柔化并收窄分割线（解决图1、图2、图3红框处难看的粗横线与巨大间距） */
+        hr {
+            margin-top: 0.8rem !important;
+            margin-bottom: 0.8rem !important;
+            border-bottom: 1px solid rgba(49, 51, 63, 0.1) !important;
+        }
+
+        /* 4. 收窄常规组件（如输入框、单选框、文件上传器）之间的纵向间距 */
+        [data-testid="stVerticalBlock"] > div {
+            padding-bottom: 0.4rem !important;
+            margin-bottom: 0px !important;
+        }
+        
+        /* 5. 让单选框（子模块导航）的间距更加精致好点 */
+        div[data-testid="stRadio"] > div {
+            gap: 4px !important;
+            padding: 0px !important;
+        }
+        
+        /* 6. 稍微收窄侧边栏各个大模块之间的间距 */
+        [data-testid="stSidebarV1"] .stMarkdown {
+            margin-bottom: -5px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # 在侧边栏和正文上方都给一个清晰的标识
 st.sidebar.title("🧰 工具箱控制台")
 # st.title("🧰 广告自动化工具箱") # 这样页面顶部永远有一个大标题
