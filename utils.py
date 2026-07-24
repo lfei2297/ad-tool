@@ -1,65 +1,113 @@
 import pandas as pd
-import re
 import io
+import zipfile
+import concurrent.futures
+import streamlit as st
+from itertools import cycle, islice
 
-def natural_sort_key(s):
-    return [int(t) if t.isdigit() else t.lower() for t in re.split('([0-9]+)', str(s))]
-
-def expand_material_versions(row, lp_v=""):
-    """
-    精准解析带有多连字符的素材名称，并根据广告素材数量进行尾部数字严格递增。
-    例如：'优化组版本-OPDY-S-260630-1-10', 数量 2
-    生成：['优化组版本-OPDY-S-260630-1-10', '优化组版本-OPDY-S-260630-1-11']
-    """
-    import re
-    
-    # 1. 获取原始素材名称与数量
-    base_name = str(row.get("广告素材版本名称", "素材")).strip()
+# ==========================================
+# 1. 基础数据读取与通用工具函数
+# ==========================================
+def safe_int(val, default=0):
+    """全局通用整型安全转换函数"""
     try:
-        # 优先读取表格中的素材数量，取不到或不合法则兜底为 1
-        provided_count = int(float(str(row.get("广告素材数量", 1)).strip()))
+        s = str(val).strip()
+        return int(float(s)) if s else default
     except:
-        provided_count = 1
-        
+        return default
+
+@st.cache_data(ttl=300, max_entries=3)
+def read_uploaded_excel(file_bytes, sheet_name=0):
+    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, dtype=str)
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed', na=False)]
+    for col in df.columns:
+        df[col] = df[col].astype(str).str.strip()
+    df = df.replace(["", "nan", "NaN", "None"], None)
+    df = df.dropna(how='all', axis=0)
+    return df.fillna("")
+
+# ==========================================
+# 2. 智能素材版本展开引擎
+# ==========================================
+def expand_material_versions(row_dict):
+    base_name = str(row_dict.get("广告素材版本名称", "素材")).strip()
+    
+    selection = str(row_dict.get("素材选取 (X-Y)", "")).strip()
+    if not selection or selection.lower() == "nan":
+        selection = str(row_dict.get("素材选取", "")).strip()
+
+    if '-' in base_name and base_name.rsplit('-', 1)[1].isdigit():
+        clean_prefix, base_start_num_str = base_name.rsplit('-', 1)
+        padding_len = len(base_start_num_str)
+        base_start_num = int(base_start_num_str)
+        has_suffix = True
+    else:
+        clean_prefix = base_name
+        padding_len = 0
+        base_start_num = 1
+        has_suffix = False
+
+    if '-' in selection and all(part.strip().isdigit() for part in selection.split('-', 1)):
+        parts = selection.split('-', 1)
+        start_num, end_num = int(parts[0]), int(parts[1])
+        if start_num > end_num:
+            start_num, end_num = end_num, start_num
+
+        versions = []
+        for i in range(start_num, end_num + 1):
+            if has_suffix:
+                formatted_num = str(i).zfill(padding_len)
+                versions.append(f"{clean_prefix}-{formatted_num}")
+            else:
+                versions.append(f"{clean_prefix}-{i}")
+        return versions
+
+    if selection.isdigit():
+        target_num = int(selection)
+        if has_suffix:
+            return [f"{clean_prefix}-{str(target_num).zfill(padding_len)}"]
+        else:
+            return [f"{clean_prefix}-{target_num}"]
+
+    provided_count = safe_int(row_dict.get("广告素材数量", 1), default=1)
     if provided_count <= 1:
         return [base_name]
 
-    # 2. 精准匹配最后一个连字符及后面的数字
-    # text: "优化组版本-OPDY-S-260630-1-10"
-    # match.group(1) -> "优化组版本-OPDY-S-260630-1"
-    # match.group(2) -> "10"
-    match = re.match(r"^(.*)-(\d+)$", base_name)
-    
-    if match:
-        clean_prefix = match.group(1)   # 不带末尾连字符的前缀
-        start_num_str = match.group(2)  # 尾部的初始数字字符串
-        start_num = int(start_num_str)  # 转为整数用于递增
-        padding_len = len(start_num_str) # 保持原有的数字位数（如 01, 02 保持两位）
-        
-        versions = []
+    versions = []
+    if has_suffix:
         for i in range(provided_count):
-            current_num = start_num + i
-            # 使用 zfill 保持原本的数字前导零（例如 10 变成 11，如果是 09 则变成 10）
+            current_num = base_start_num + i
             formatted_num = str(current_num).zfill(padding_len)
             versions.append(f"{clean_prefix}-{formatted_num}")
         return versions
     else:
-        # 如果根本没有连字符加数字结尾（如直接叫 "Material"），则走常规编号形式
         return [f"{base_name}-{i}" for i in range(1, provided_count + 1)]
 
+# ==========================================
+# 3. 辅助循环工具函数
+# ==========================================
+def cycle_repeat(items, target_len):
+    if not items or target_len <= 0:
+        return []
+    repeated = list(islice(cycle(items), target_len))
+    if repeated and isinstance(repeated[0], dict):
+        return [item.copy() for item in repeated]
+    return repeated
+
+# ==========================================
+# 4. 终极 Excel 渲染引擎
+# ==========================================
 def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
-    """统一清洗、格式化并导出 Excel"""
-    
-    # 强力防呆：兼容运营手写小写 sku
+    """
+    【生成结果文件专用】：彻底取消保护锁，确保所有处理后的结果文件 100% 完全可自由编辑！
+    """
     df = df.rename(columns={"真实sku": "真实SKU", "虚拟sku": "虚拟SKU"})
     if "真实SKU" not in df.columns: df["真实SKU"] = ""
     if "虚拟SKU" not in df.columns: df["虚拟SKU"] = ""
         
-    # 自动剔除对于当前模块无用的字段
     cols_to_del = ["广告素材数量", "素材选取 (X-Y)", "素材选取"]
-    df_out = df.drop(columns=[c for c in cols_to_del if c in df.columns]).copy()
+    df_out = df.drop(columns=cols_to_del, errors='ignore').copy()
     
-    # 列顺序重排，确保出价和注意事项在最后面
     target_order = [
         "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
         "国家", "着陆页版本名称", "广告素材版本名称", "出价/竞价", "注意事项"
@@ -68,18 +116,11 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
     other_cols = [c for c in df_out.columns if c not in target_order]
     df_out = df_out[ordered_cols + other_cols]
 
-    # ==========================================
-    # ✨ 核心升级：动态识别与无缝拼装说明行
-    # ==========================================
     hint_df = params.get('dynamic_hint')
-    
-    # 1. 优先使用从模板里动态提取的“原汁原味”说明行
     if hint_df is not None and not hint_df.empty:
-        # 按导出表的列名，去模板的说明行里对号入座拿文字
         hint_dict = {c: str(hint_df.iloc[0].get(c, "")) for c in df_out.columns}
         hint_row = pd.DataFrame([hint_dict])
     else:
-        # 2. 兜底保护：万一没提取到，继续使用静态字典
         hints = {
             "主页ID": "可不填，不填则使用资产管理中的默认主页",
             "像素ID": "可不填，不填则使用资产管理中的默认像素",
@@ -94,70 +135,174 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
         hint_row = pd.DataFrame([{c: hints.get(c, "") for c in df_out.columns}])
         
     df_out = pd.concat([hint_row, df_out], ignore_index=True)
-    # ==========================================
 
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df_out.to_excel(writer, index=False, sheet_name=sheet_name)
-        
-        # 样式渲染逻辑：列宽调整、说明行标黄红字、自动按SKU/分组交替着色
-        if not params.get('fast_mode', False):
+    with io.BytesIO() as output:
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df_out.to_excel(writer, index=False, sheet_name=sheet_name)
             workbook, worksheet = writer.book, writer.sheets[sheet_name]
             
-            # ==========================================
-            # ✨ 优化一：智能列宽调整引擎
-            # ==========================================
-            for i, col in enumerate(df_out.columns):
-                # 计算表头文字的实际宽度（中文算2个字符宽度，英文算1个，比单纯的 len() 更精确）
-                header_width = len(str(col).encode('gbk', errors='ignore'))
-                
-                # 针对你要求变窄的特定列，完全贴合表头宽度（加2个单位作为左右边距）
-                if col in ["真实SKU", "虚拟SKU", "国家", "出价/竞价"]:
-                    col_width = header_width + 2
-                elif col in ["注意事项", "着陆页版本名称", "广告素材版本名称"]:
-                    # 这些列内容通常较长，给大一点的固定宽度
-                    col_width = max(header_width + 4, 25)
-                else:
-                    # 其他常规列，保持一个基础的最小宽度（15）
-                    col_width = max(header_width + 4, 15)
-                    
-                worksheet.set_column(i, i, col_width)
+            num_rows, num_cols = df_out.shape
             
-            # ==========================================
-            # ✨ 优化二：带自动换行的说明行 & 交替上色
-            # ==========================================
-            if params.get('enable_color', True):
-                colors = ["#FFF2CC", "#E2EFDA", "#DDEBF7", "#F8CBAD", "#E4DFEC", "#D9D9D9", "#EBF1DE"]
-                
-                if color_by and color_by in df_out.columns:
-                    target_col = color_by
-                elif is_m3 and "分组" in df_out.columns:
-                    target_col = "分组"
-                else:
-                    df_out["_color_key"] = df_out["真实SKU"].astype(str) + df_out["虚拟SKU"].astype(str)
-                    target_col = "_color_key"
+            # 自动筛选，但不开启 protect 锁
+            worksheet.autofilter(0, 0, 0, num_cols - 1)
 
-                current_color_idx = 0
-                last_val = None
+            if not params.get('fast_mode', False):
+                # 列宽高精度计算
+                for i, col in enumerate(df_out.columns):
+                    gbk_len = len(str(col).encode('gbk', errors='ignore'))
+                    worksheet.set_column(i, i, max(gbk_len + 4, 15))
                 
-                for row_idx in range(len(df_out)):
-                    # 🎯 针对第一行（说明行）的专属定制：
-                    if row_idx == 0:
-                        hint_fmt = workbook.add_format({
-                            'bg_color': '#FFFFCC', 
-                            'font_color': 'red', 
-                            'bold': True,
-                        })
-                        # 因为“出价”等列变窄了，换行后文字会被挤成好几排，所以行高提升到 60 确保完全显示
-                        worksheet.set_row(row_idx + 1, 25, hint_fmt)
-                        continue
-                        
-                    current_val = df_out.iloc[row_idx].get(target_col, "")
-                    if last_val is not None and current_val != last_val:
-                        current_color_idx = (current_color_idx + 1) % len(colors)
+                if params.get('enable_color', True):
+                    colors = ["#FFF2CC", "#E2EFDA", "#DDEBF7", "#F8CBAD", "#E4DFEC", "#D9D9D9", "#EBF1DE"]
+                    color_fmts = [workbook.add_format({'bg_color': c, 'locked': False}) for c in colors]
+                    hint_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True, 'locked': False})
                     
-                    fmt = workbook.add_format({'bg_color': colors[current_color_idx]})
-                    worksheet.set_row(row_idx + 1, None, fmt)
-                    last_val = current_val
+                    if color_by and color_by in df_out.columns:
+                        target_series = df_out[color_by]
+                    elif is_m3 and "分组" in df_out.columns:
+                        target_series = df_out["分组"]
+                    else:
+                        target_series = df_out["真实SKU"].astype(str).str.cat(df_out["虚拟SKU"].astype(str), sep="_")
 
-    return output.getvalue()
+                    color_keys = target_series.tolist()
+                    worksheet.set_row(1, 25, hint_fmt)
+                    
+                    current_color_idx = 0
+                    last_val = None
+                    
+                    for idx in range(1, len(color_keys)):
+                        current_val = color_keys[idx]
+                        if last_val is not None and current_val != last_val:
+                            current_color_idx = (current_color_idx + 1) % len(colors)
+                        worksheet.set_row(idx + 1, None, color_fmts[current_color_idx])
+                        last_val = current_val
+
+        excel_bytes = output.getvalue()
+    del df_out
+    return excel_bytes
+
+# ==========================================
+# 5. 通用多线程 ZIP 打包器
+# ==========================================
+def create_zip_package(tasks_dict, params, total_excel_bytes=None):
+    def process_task(task_item):
+        n, d = task_item
+        if n == "总表" and total_excel_bytes is not None: 
+            return n, total_excel_bytes
+        return n, write_excel_final(d, "Data", params)
+
+    zip_b = io.BytesIO()
+    with zipfile.ZipFile(zip_b, "w", compression=zipfile.ZIP_STORED) as zf:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = executor.map(process_task, tasks_dict.items())
+            for n, file_bytes in results:
+                zf.writestr(f"{params.get('prefix', '项目_')}{n}.xlsx", file_bytes)
+    return zip_b.getvalue()
+
+# ==========================================
+# 6. 通用标准模板生成器
+# ==========================================
+def build_template(columns_dict, sheet_name):
+    df = pd.DataFrame([columns_dict])
+    out = io.BytesIO()
+    
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        workbook = writer.book
+        worksheet = writer.sheets[sheet_name]
+        
+        worksheet.autofilter(0, 0, 0, len(columns_dict) - 1)
+        worksheet.protect('', {'autofilter': True, 'sort': True, 'format_columns': True})
+        
+        unlocked_fmt = workbook.add_format({'locked': False})
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'locked': True})
+        warning_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True, 'locked': True})
+        
+        worksheet.set_column(0, 100, 18, unlocked_fmt)
+        worksheet.set_row(1, 18)
+        
+        for i, (col_name, hint_text) in enumerate(columns_dict.items()):
+            header_width = len(str(col_name).encode('gbk', errors='ignore'))
+            if col_name in ["真实SKU", "虚拟SKU", "国家", "出价/竞价"]:
+                col_width = header_width + 2
+            elif col_name in ["注意事项", "着陆页版本名称", "广告素材版本名称"]:
+                col_width = max(header_width + 4, 25)
+            else:
+                col_width = max(header_width + 4, 15)
+                
+            worksheet.set_column(i, i, col_width, unlocked_fmt)
+            worksheet.write(0, i, col_name, header_fmt)
+            worksheet.write(1, i, str(hint_text), warning_fmt)
+            
+    return out.getvalue()
+
+def get_template_standard():
+    return build_template({
+        "广告账号ID": "", 
+        "主页ID": "可不填，不填则使用资产管理中的默认主页", 
+        "像素ID": "可不填，不填则使用资产管理中的默认像素", 
+        "真实SKU": "填了真实SKU就不能填虚拟SKU", 
+        "虚拟SKU": "填了虚拟SKU就不能填真实SKU", 
+        "国家": "美国/英国/德国/法国/西班牙", 
+        "着陆页版本名称": "着陆页库中的具体版本名称", 
+        "广告素材版本名称": "广告素材库中的具体版本名称", 
+        "广告素材数量": "根据需要填写", 
+        "素材选取 (X-Y)": "指定素材区间填写，无指定可不填", 
+        "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填", 
+        "注意事项": "此行为说明，勿删除，请从第三行开始填写"
+    }, sheet_name="标准模板")
+
+def get_template_m4():
+    return build_template({
+        "广告账号ID": "", 
+        "主页ID": "可不填", 
+        "像素ID": "可不填", 
+        "真实SKU": "", 
+        "虚拟SKU": "", 
+        "国家": "", 
+        "着陆页版本名称": "", 
+        "广告素材版本名称": "填素材前缀 (如 视频)", 
+        "提供素材版本数量": "填实际数字 (如 5)", 
+        "广告组数量": "填实际组数 (默认1)",         # ✨ 补齐：广告组数量
+        "导品系列数": "填系列数 (默认1)", 
+        "补充默认版本数": "校验用，可填0", 
+        "注意事项": "此行为说明，勿删除，请从第三行开始填写"
+    }, sheet_name="模块四模板")
+    
+def get_template_m7():
+    """
+    构建模块七专用模板（包含账号表与SKU表两个Sheet，取消第二行说明行，全表可自由编辑）
+    """
+    acc_cols = ["资产", "账号ID", "主页ID", "像素ID", "品类", "需要组合的SKU数量"]
+    sku_cols = ["真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "商品分类", "出价/竞价"]
+
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        # Sheet1: 账号表
+        df_acc = pd.DataFrame(columns=acc_cols)
+        df_acc.to_excel(writer, index=False, sheet_name="账号表")
+        ws_acc = writer.sheets["账号表"]
+        
+        # Sheet2: SKU表
+        df_sku = pd.DataFrame(columns=sku_cols)
+        df_sku.to_excel(writer, index=False, sheet_name="SKU表")
+        ws_sku = writer.sheets["SKU表"]
+
+        workbook = writer.book
+        header_fmt = workbook.add_format({
+            'bold': True, 
+            'bg_color': '#E0E0E0', 
+            'border': 1
+        })
+
+        for ws, cols in [(ws_acc, acc_cols), (ws_sku, sku_cols)]:
+            # 仅在第 1 行（表头）开启自动筛选，不加 protect() 锁，全表自由编辑
+            ws.autofilter(0, 0, 0, len(cols) - 1)
+            
+            # 设置漂亮的默认列宽与表头样式
+            for i, col_name in enumerate(cols):
+                w = max(len(str(col_name).encode('gbk', errors='ignore')) + 6, 18)
+                ws.set_column(i, i, w)
+                ws.write(0, i, col_name, header_fmt)
+
+    return out.getvalue()
