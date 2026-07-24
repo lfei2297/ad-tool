@@ -1,95 +1,136 @@
 import streamlit as st
 import pandas as pd
-import zipfile
-import io
-import re
+import gc
 from collections import defaultdict
-from utils import expand_material_versions, write_excel_final
+from utils import expand_material_versions, read_uploaded_excel, write_excel_final, create_zip_package
 
 def run(params):
     st.subheader("🛠️ 模块一：基础独立拆分")
     
-    # --- 🔄 素材重复设置 ---
-    st.markdown("#### 🔄 素材重复设置")
-    col1, col2 = st.columns(2)
-    with col1:
-        repeat_1 = st.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数，可以看作广告组数，例如1:30:N的情况下重复次数就是30")
-    with col2:
-        repeat_2 = st.number_input("第二次重复次数", min_value=1, value=1, help="总表整体复制次数，即原表中这一行品需要导入的系列数")
+    col_setting1, col_setting2, col_mode = st.columns([1, 1, 1.5])
     
-    # 更新局部参数
+    with col_setting1:
+        repeat_1 = st.number_input("第一次重复次数", min_value=1, value=1, help="单条素材基础展开次数，可以看作广告组数")
+    with col_setting2:
+        repeat_2 = st.number_input("第二次重复次数", min_value=1, value=1, help="整体复制次数，即原表中这一行品需要导入的系列数")
+    with col_mode:
+        st.write(""); st.write("")
+        only_total = st.checkbox("⚡ 仅生成完整总表", value=True, help="取消勾选后，才会额外打包下载子表 ZIP 包")
+
     params['repeat_1'] = repeat_1
     params['repeat_2'] = repeat_2
 
     up = st.file_uploader("📂 上传原始素材表 (.xlsx)", type=["xlsx"], key="m1_up")
     
-    if up and st.button("🚀 开始处理"):
-        df_raw = pd.read_excel(up, dtype=str).fillna("")
-        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
-        df_raw = df_raw[~df_raw.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
-        tasks = {}
-        all_exp = []
-        file_groups = defaultdict(list)
+    # 🌟 切换/重置文件时清空缓存
+    if "m1_last_up" not in st.session_state or st.session_state["m1_last_up"] != (up.name if up else None):
+        st.session_state["m1_last_up"] = up.name if up else None
+        st.session_state.pop("m1_excel_bytes", None)
+        st.session_state.pop("m1_zip_bytes", None)
 
-        for _, row in df_raw.iterrows():
-            lp_match = re.search(r'-(\d+)$', str(row.get("着陆页版本名称", "")))
-            lp_v = lp_match.group(1) if lp_match else ""
-            vs = expand_material_versions(row, lp_v)
-            
-            row_rows = []
-            for v in vs:
-                nr = row.copy()
-                nr["广告素材版本名称"] = v
-                for _ in range(repeat_1): row_rows.append(nr.copy())
-            
-            tmp = pd.DataFrame(row_rows)
-            if repeat_2 > 1:
-                tmp = pd.concat([tmp] * repeat_2, ignore_index=True)
-            
-            all_exp.append(tmp)
-            file_groups[f"素材数_{len(vs)}"].append(tmp)
+    if up:
+        st.write("")
+        if st.button("🚀 开始处理", key="m1_start_btn"):
+            with st.spinner("🚀 数据处理与文件打包中，请稍候..."):
+                df_raw = read_uploaded_excel(up.getvalue())
+                
+                raw_dicts = df_raw.to_dict('records')
+                valid_rows = [
+                    row for row in raw_dicts 
+                    if not any('此行为说明' in str(v) or '可不填' in str(v) for v in row.values())
+                ]
+                
+                all_expanded_dicts = []
+                file_groups = defaultdict(list)
 
-        # 汇聚总表与子表数据
-        df_total = pd.concat(all_exp, ignore_index=True)
-        tasks["总表"] = df_total
-        for k, v in file_groups.items():
-            tasks[k] = pd.concat(v, ignore_index=True)
+                # 遍历字典生成展开数据
+                for row_dict in valid_rows:
+                    vs = expand_material_versions(row_dict)
+                    
+                    row_rows = []
+                    for v in vs:
+                        nr = row_dict.copy()
+                        nr["广告素材版本名称"] = v
+                        for _ in range(repeat_1): 
+                            row_rows.append(nr.copy())
+                    
+                    if repeat_2 > 1:
+                        row_rows = row_rows * repeat_2
+                    
+                    all_expanded_dicts.extend(row_rows)
+                    
+                    # 🌟 1. 按素材数量分类保存
+                    if not only_total:
+                        file_groups[f"素材数_{len(vs)}"].extend(row_rows)
 
-        # --- ✨ 核心新增：单独为“总表”生成一份独立 Excel 数据 ---
-        total_excel_data = write_excel_final(df_total, "Data", params)
+                if all_expanded_dicts:
+                    df_total = pd.DataFrame(all_expanded_dicts)
+                    
+                    local_params = params.copy()
+                    local_params['fast_mode'] = False  
+                    local_params['enable_color'] = True
+                    
+                    # 生成总表数据
+                    total_excel_data = write_excel_final(df_total, "Data", local_params)
+                    st.session_state["m1_excel_bytes"] = total_excel_data
+                    
+                    # 🌟 2. 构建多文件打包任务 Tasks
+                    if not only_total:
+                        tasks = {"总表": df_total}
+                        
+                        # (A) 加入按素材数拆分的子表
+                        for k, v in file_groups.items():
+                            tasks[k] = pd.DataFrame(v)
+                            
+                        # (B) 加入按账号ID拆分的子表 (恢复多文件完整性)
+                        if "广告账号ID" in df_total.columns:
+                            acc_groups = df_total.groupby("广告账号ID")
+                            for acc_id, acc_df in acc_groups:
+                                acc_str = str(acc_id).strip()
+                                if acc_str and acc_str.lower() != "nan":
+                                    tasks[f"账号_{acc_str}"] = acc_df
+                                    
+                        # 生成包含所有多文件的 ZIP 压缩包
+                        zip_data = create_zip_package(tasks, local_params, total_excel_data)
+                        st.session_state["m1_zip_bytes"] = zip_data
+                    else:
+                        st.session_state.pop("m1_zip_bytes", None)
 
-        # 构建全套压缩包数据
-        zip_b = io.BytesIO()
-        with zipfile.ZipFile(zip_b, "w") as zf:
-            for n, d in tasks.items():
-                # 复用已有逻辑压入压缩包
-                if n == "总表":
-                    zf.writestr(f"{params['prefix']}{n}.xlsx", total_excel_data)
-                else:
-                    zf.writestr(f"{params['prefix']}{n}.xlsx", write_excel_final(d, "Data", params))
-        
-        st.success("✨ 数据处理成功！请选择下方合适的方式下载：")
-        st.markdown("---")
+                    del df_total, all_expanded_dicts, file_groups
+                    gc.collect()
 
-        # --- 📐 按钮横向排版：独立总表与压缩包并存 ---
-        dl_col1, dl_col2 = st.columns(2)
-        
-        with dl_col1:
-            # 新增按钮：单独直出下载大总表
-            st.download_button(
-                label="📊 💾 单独下载：完整总表 (Excel)", 
-                data=total_excel_data, 
-                file_name=f"{params['prefix']}总表.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="m1_single_total_btn"
-            )
-            
-        with dl_col2:
-            # 原有按钮：下载全套压缩包
-            st.download_button(
-                label="📦 💾 下载全套：结果文件包 (ZIP)", 
-                data=zip_b.getvalue(), 
-                file_name=f"{params['prefix']}结果.zip",
-                mime="application/zip",
-                key="m1_zip_package_btn"
-            )
+        # 🌟 3. 持久化渲染下载区域（点击任意按钮不会刷新丢失）
+        if "m1_excel_bytes" in st.session_state:
+            st.success("✨ 处理成功！", icon="✅")
+
+            if only_total or "m1_zip_bytes" not in st.session_state:
+                col_btn, _ = st.columns([1, 1])
+                with col_btn:
+                    st.download_button(
+                        label="📊 💾 下载：完整总表 (Excel)", 
+                        data=st.session_state["m1_excel_bytes"], 
+                        file_name=f"{params.get('prefix', '项目_')}总表.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="dl_m1_excel"
+                    )
+            else:
+                dl_col1, dl_col2 = st.columns(2)
+                with dl_col1:
+                    st.download_button(
+                        label="📊 💾 下载：完整总表 (Excel)", 
+                        data=st.session_state["m1_excel_bytes"], 
+                        file_name=f"{params.get('prefix', '项目_')}总表.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="dl_m1_excel_multi"
+                    )
+                with dl_col2:
+                    st.download_button(
+                        label="📦 💾 下载全套：分类包 (ZIP)", 
+                        data=st.session_state["m1_zip_bytes"], 
+                        file_name=f"{params.get('prefix', '项目_')}结果.zip",
+                        mime="application/zip",
+                        use_container_width=True,
+                        key="dl_m1_zip"
+                    )

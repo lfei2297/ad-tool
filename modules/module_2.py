@@ -1,43 +1,40 @@
 import streamlit as st
 import pandas as pd
-import re
+import gc
 from collections import defaultdict
-import io
-import zipfile
-
-# 现在可以安全地从根目录导入 utils 了
-from utils import expand_material_versions, write_excel_final
-
+from utils import expand_material_versions, read_uploaded_excel, create_zip_package
 
 def run(params):
-    # ✨ 新增：在模块内部锁定重复次数为 1，不显示在界面上
     params['repeat_1'] = 1
     params['repeat_2'] = 1
     st.subheader("🌍 模块二：同SKU+国家聚合拆分")
     up = st.file_uploader("📂 上传原始素材表 (.xlsx)", type=["xlsx"], key="m2_up")
     
     if up and st.button("🚀 开始处理", key="m2_btn"):
-        df_raw = pd.read_excel(up, dtype=str).fillna("")
-        # ✨ 新增：强力过滤掉“说明行”，防止它被当成真实广告素材去循环
-        df_raw = df_raw[~df_raw.astype(str).apply(lambda x: x.str.contains('此行为说明|可不填', na=False)).any(axis=1)].reset_index(drop=True)
+        df_raw = read_uploaded_excel(up.getvalue())
+        
+        raw_dicts = df_raw.to_dict('records')
+        valid_rows = [
+            row for row in raw_dicts 
+            if not any('此行为说明' in str(v) or '可不填' in str(v) for v in row.values())
+        ]
+
+        if not valid_rows:
+            st.warning("⚠️ 上传的表格中未检测到有效的业务数据，请检查后再试。")
+            return
+
         tasks = {}
         all_expanded = []
-        
-        # 聚合容器
         m2_agg = defaultdict(list)
         m2_counts = defaultdict(int)
 
-        for _, row in df_raw.iterrows():
-            # 1. 解析
-            lp_match = re.search(r'-(\d+)$', str(row.get("着陆页版本名称", "")))
-            lp_v = lp_match.group(1) if lp_match else ""
-            vs = expand_material_versions(row, lp_v)
+        for row_dict in valid_rows:
+            vs = expand_material_versions(row_dict)
             m_len = len(vs)
             
-            # 2. 展开
             row_rows = []
             for v in vs:
-                nr = row.copy()
+                nr = row_dict.copy()
                 nr["广告素材版本名称"] = v
                 for _ in range(params['repeat_1']): row_rows.append(nr.copy())
             
@@ -47,33 +44,30 @@ def run(params):
             
             all_expanded.append(tmp)
             
-            # 3. 模块二聚合标识：优先取真实SKU，其次取虚拟SKU
-            sku = str(row.get("真实SKU","")).strip()
+            sku = str(row_dict.get("真实SKU","")).strip()
             if sku == "" or sku.lower() == "nan":
-                sku = str(row.get("虚拟SKU","")).strip()
+                sku = str(row_dict.get("虚拟SKU","")).strip()
             
-            country = str(row.get("国家","")).strip()
+            country = str(row_dict.get("国家","")).strip()
             
-            # 聚合：同一 (SKU, 国家) 的数据存入列表
             m2_agg[(sku, country)].append(tmp)
             m2_counts[(sku, country)] += m_len
 
-        # 总表 (不强制排序)
         tasks["总表"] = pd.concat(all_expanded, ignore_index=True)
         
-        # 聚合拆分表
         for (sku, country), dfs in m2_agg.items():
             total_m = m2_counts[(sku, country)]
             c_tag = f"{country}_" if country else ""
-            # 文件名体现：国家_素材数_总数
             filename = f"{c_tag}素材数_{total_m}"
             tasks[filename] = pd.concat(dfs, ignore_index=True)
 
-        # 打包 ZIP
-        zip_b = io.BytesIO()
-        with zipfile.ZipFile(zip_b, "w") as zf:
-            for n, d in tasks.items():
-                zf.writestr(f"{params['prefix']}{n}.xlsx", write_excel_final(d, "Data", params))
+        zip_bytes = create_zip_package(tasks, params)
         
         st.success("🎉 聚合处理完成！")
-        st.download_button("📦 下载聚合结果包 (ZIP)", data=zip_b.getvalue(), file_name=f"{params['prefix']}聚合结果.zip")
+        st.download_button("📦 下载聚合结果包 (ZIP)", data=zip_bytes, file_name=f"{params['prefix']}聚合结果.zip")
+        
+        # 🌟 安全的列表式清理写法，绝无 NameError 风险
+        possible_vars = ['df_raw', 'valid_rows', 'all_expanded', 'tasks', 'm2_agg', 'tmp']
+        for var in possible_vars:
+            if var in locals(): del locals()[var]
+        gc.collect()

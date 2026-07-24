@@ -1,95 +1,113 @@
 import streamlit as st
 import pandas as pd
 import io
+from utils import read_uploaded_excel
+
+def find_col(df, *candidates):
+    """
+    智能列名容错查找函数：
+    忽略大小写、空格及下划线，尝试在 df.columns 中匹配 candidates 中任意一个备选列名。
+    找到则返回 df 中实际的列名，未找到返回 None。
+    """
+    cols_normalized = {
+        c.lower().replace(" ", "").replace("_", ""): c 
+        for c in df.columns
+    }
+    for cand in candidates:
+        key = cand.lower().replace(" ", "").replace("_", "")
+        if key in cols_normalized:
+            return cols_normalized[key]
+    return None
 
 def run():
-    st.subheader("🎯 账号-像素自动匹配工具")
+    st.subheader("🔗 账号-像素自动匹配工具")
     
-    st.info(
-        "🔗 **账号-像素自动匹配**：上传包含账号和像素的 Excel，工具会自动按照资产进行匹配，并输出一个新的 Excel，包含账号ID与像素ID的绑定关系，以及完整的对照表。"
-    )
+    up_file = st.file_uploader("📂 上传资产分配表 (.xlsx)", type=["xlsx"], key="asset_up")
     
-    with st.expander("💡 运行逻辑说明"):
-        st.write("1. **资产隔离**：账号绑定的像素必须是同资产的，防止交叉绑定。")
-        st.write("2. **动态复制**：根据像素个数自动复制账号行数。")
-        st.write("3. **顺序锁定**：严格按照在原始 Excel 中手动调好的账号和像素顺序排列。")
-        st.write("4. **格式优化**：自动适配列宽，且 ID 类长数字不会变成科学计数法。")
-
-    uploaded_file = st.file_uploader("📤 上传原始 Excel 数据 (需包含账号表和像素表)", type=["xlsx"])
-
-    if uploaded_file:
+    if up_file and st.button("🚀 开始匹配资产", key="asset_btn"):
+        file_bytes = up_file.getvalue()
+        
         try:
-            # 1. 读取数据并记录原始顺序
-            # 强制将ID列设为字符串类型，防止科学计数法
-            df_acc = pd.read_excel(uploaded_file, sheet_name=0, dtype={'账号ID': str})
-            df_pix = pd.read_excel(uploaded_file, sheet_name=1, dtype={'像素ID': str})
-
-            # 校验必要字段
-            required_acc = ['资产', '账号ID', '账号名称']
-            required_pix = ['资产', '像素ID', '像素名称']
-            
-            if not all(col in df_acc.columns for col in required_acc) or \
-               not all(col in df_pix.columns for col in required_pix):
-                st.error("❌ 上传的表格字段不全，请检查是否包含：资产、账号ID、账号名称、像素ID、像素名称")
-                return
-
-            # 记录原始行索引
-            df_acc['_acc_order'] = range(len(df_acc))
-            df_pix['_pix_order'] = range(len(df_pix))
-
-            # 准备合并
-            df_acc_r = df_acc.rename(columns={'资产': '账号表-资产'})
-            df_pix_r = df_pix.rename(columns={'资产': '像素表-资产'})
-
-            # 2. 合并与恢复原始顺序
-            combined_df = pd.merge(
-                df_acc_r, 
-                df_pix_r, 
-                left_on='账号表-资产', 
-                right_on='像素表-资产', 
-                how='inner'
-            )
-            
-            # 排序：账号原始位置 -> 像素原始位置
-            combined_df = combined_df.sort_values(by=['_acc_order', '_pix_order'])
-
-            # 3. 准备子表
-            sheet1 = combined_df[['账号ID', '像素ID']]
-            sheet2 = combined_df[[
-                '账号表-资产', '账号名称', '账号ID', 
-                '像素表-资产', '像素名称', '像素ID'
-            ]]
-
-            # 4. 写入内存 Excel 并设置样式
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                sheet1.to_excel(writer, sheet_name='ID绑定关系', index=False)
-                sheet2.to_excel(writer, sheet_name='完整明细对照', index=False)
-                
-                # 设置列宽自适应和文本格式
-                for sheetname in writer.sheets:
-                    ws = writer.sheets[sheetname]
-                    for col in ws.columns:
-                        max_length = 0
-                        column_letter = col[0].column_letter
-                        for cell in col:
-                            if cell.value:
-                                val_str = str(cell.value)
-                                length = sum(2 if ord(char) > 127 else 1 for char in val_str)
-                                if length > max_length:
-                                    max_length = length
-                        ws.column_dimensions[column_letter].width = max_length + 3
-                        # 再次强制文本格式
-                        for cell in col:
-                            cell.number_format = '@'
-
-            st.success("✅ 处理完成！")
-            st.download_button(
-                label="💾 点击下载匹配结果",
-                data=output.getvalue(),
-                file_name="账号像素匹配结果.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
+            df_acc = read_uploaded_excel(file_bytes, sheet_name="账号表")
+            df_pix = read_uploaded_excel(file_bytes, sheet_name="像素表")
         except Exception as e:
-            st.error(f"⚠️ 处理出错: {e}")
+            st.error("⚠️ 读取失败：请确保 Excel 文件中包含名为【账号表】和【像素表】的 Sheet 页！")
+            return
+
+        if df_acc.empty or df_pix.empty:
+            st.warning("⚠️ 检测到账号表或像素表为空，请检查上传文件！")
+            return
+
+        # 智能匹配两表的核心字段名
+        acc_asset_col = find_col(df_acc, "资产", "资产名称", "Asset")
+        pix_asset_col = find_col(df_pix, "资产", "资产名称", "Asset")
+        
+        acc_id_col = find_col(df_acc, "账号ID", "账号 ID", "账号id", "AccountID", "Account_ID")
+        pix_id_col = find_col(df_pix, "像素ID", "像素 ID", "像素id", "PixelID", "Pixel_ID")
+
+        if not acc_asset_col or not pix_asset_col:
+            st.error("⚠️ 两表中均需包含名为【资产】的关联列，请检查表头！")
+            return
+
+        if not acc_id_col or not pix_id_col:
+            st.error("⚠️ 未能在账号表中找到【账号ID】或像素表中找到【像素ID】列，请检查表头！")
+            return
+
+        # 记录原始相对位置以保持自然排序
+        df_acc['_acc_order'] = range(len(df_acc))
+        df_pix['_pix_order'] = range(len(df_pix))
+
+        # 统一重命名关联键字段为“资产”，并给其他字段加上前缀区分
+        df_acc_renamed = df_acc.rename(columns={
+            acc_asset_col: "资产",
+            acc_id_col: "账号表-账号ID"
+        })
+        df_pix_renamed = df_pix.rename(columns={
+            pix_asset_col: "资产",
+            pix_id_col: "像素表-像素ID"
+        })
+
+        # 重命名其余重名业务列
+        df_acc_renamed = df_acc_renamed.rename(columns={
+            c: f"账号表-{c}" if c not in ["资产", "账号表-账号ID"] and not c.startswith("_") else c 
+            for c in df_acc_renamed.columns
+        })
+        df_pix_renamed = df_pix_renamed.rename(columns={
+            c: f"像素表-{c}" if c not in ["资产", "像素表-像素ID"] and not c.startswith("_") else c 
+            for c in df_pix_renamed.columns
+        })
+
+        # 关联 Merge
+        combined_df = pd.merge(
+            df_acc_renamed, 
+            df_pix_renamed, 
+            on="资产", 
+            how="inner"
+        )
+
+        if combined_df.empty:
+            st.warning("⚠️ 匹配结果为空，未在两表中找到名称完全相同的【资产】！")
+            return
+
+        # 按原始顺位稳定排序
+        combined_df = combined_df.sort_values(by=['_acc_order', '_pix_order']).reset_index(drop=True)
+        combined_df = combined_df.drop(columns=['_acc_order', '_pix_order'], errors='ignore')
+
+        # 提取业务需要的对齐列
+        sheet1_df = combined_df[['账号表-账号ID', '像素表-像素ID']].rename(columns={
+            '账号表-账号ID': '账号ID',
+            '像素表-像素ID': '像素ID'
+        })
+
+        out_b = io.BytesIO()
+        with pd.ExcelWriter(out_b, engine="xlsxwriter") as writer:
+            sheet1_df.to_excel(writer, index=False, sheet_name="账号像素对")
+            combined_df.to_excel(writer, index=False, sheet_name="完整匹配详情")
+
+        st.success("🎉 匹配成功！已按“资产”归属完美对齐。")
+        st.download_button(
+            "💾 下载：账号像素匹配结果 (.xlsx)", 
+            data=out_b.getvalue(), 
+            file_name="账号像素匹配结果.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
