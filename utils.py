@@ -110,7 +110,7 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
     
     target_order = [
         "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
-        "国家", "着陆页版本名称", "广告素材版本名称", "出价/竞价", "注意事项"
+        "国家", "着陆页版本名称", "广告素材版本名称", "出价/竞价", "系列标注", "注意事项"
     ]
     ordered_cols = [c for c in target_order if c in df_out.columns]
     other_cols = [c for c in df_out.columns if c not in target_order]
@@ -130,6 +130,7 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
             "着陆页版本名称": "着陆页库中的具体版本名称",
             "广告素材版本名称": "广告素材库中的具体版本名称",
             "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
+            "系列标注": "可不填",
             "注意事项": "此行为说明，勿删除，请从第三行开始填写"
         }
         hint_row = pd.DataFrame([{c: hints.get(c, "") for c in df_out.columns}])
@@ -223,7 +224,7 @@ def build_template(columns_dict, sheet_name):
         
         for i, (col_name, hint_text) in enumerate(columns_dict.items()):
             header_width = len(str(col_name).encode('gbk', errors='ignore'))
-            if col_name in ["真实SKU", "虚拟SKU", "国家", "出价/竞价"]:
+            if col_name in ["真实SKU", "虚拟SKU", "国家", "出价/竞价", "系列标注"]:
                 col_width = header_width + 2
             elif col_name in ["注意事项", "着陆页版本名称", "广告素材版本名称"]:
                 col_width = max(header_width + 4, 25)
@@ -248,7 +249,8 @@ def get_template_standard():
         "广告素材版本名称": "广告素材库中的具体版本名称", 
         "广告素材数量": "根据需要填写", 
         "素材选取 (X-Y)": "指定素材区间填写，无指定可不填", 
-        "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填", 
+        "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
+        "系列标注": "可不填",
         "注意事项": "此行为说明，勿删除，请从第三行开始填写"
     }, sheet_name="标准模板")
 
@@ -261,11 +263,13 @@ def get_template_m4():
         "虚拟SKU": "", 
         "国家": "", 
         "着陆页版本名称": "", 
-        "广告素材版本名称": "填素材前缀 (如 视频)", 
-        "提供素材版本数量": "填实际数字 (如 5)", 
+        "广告素材版本名称": "", 
+        "提供素材版本数量": "", 
         "广告组数量": "填实际组数 (默认1)",         # ✨ 补齐：广告组数量
         "导品系列数": "填系列数 (默认1)", 
         "补充默认版本数": "校验用，可填0", 
+        "出价/竞价": "",
+        "系列标注": "可不填",
         "注意事项": "此行为说明，勿删除，请从第三行开始填写"
     }, sheet_name="模块四模板")
     
@@ -273,7 +277,7 @@ def get_template_m7():
     """
     构建模块七专用模板（包含账号表与SKU表两个Sheet，取消第二行说明行，全表可自由编辑）
     """
-    acc_cols = ["资产", "账号ID", "主页ID", "像素ID", "品类", "需要组合的SKU数量"]
+    acc_cols = ["资产", "账号ID", "主页ID", "像素ID", "品类", "需要组合的SKU数量", "系列标注"]
     sku_cols = ["真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "商品分类", "出价/竞价"]
 
     out = io.BytesIO()
