@@ -280,6 +280,7 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
         target_sku_count = safe_int(acc_dict.get("需要组合的SKU数量"), default=1)
         zhuye = str(acc_dict.get("主页ID", "")).strip()
         xiangsu = str(acc_dict.get("像素ID", "")).strip()
+        xilie = str(acc_dict.get("系列标注", "")).strip()
 
         if not category:
             warning_logs.append(f"⚠️ 行 {excel_line} [账号:{acc_id}] 未填写品类，跳过。")
@@ -350,6 +351,7 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
             item["广告账号ID"] = acc_id
             item["主页ID"] = zhuye
             item["像素ID"] = xiangsu
+            item["系列标注"] = xilie
             item["备注"] = note_text
             final_rows.append(item)
 
@@ -447,12 +449,26 @@ def run(params):
                 ]
 
                 all_cols = preferred_order + remaining_cols
-                if "备注" not in all_cols and "备注" in final_df.columns:
-                    all_cols.append("备注")
+                
+                if "系列标注" in final_df.columns:
+                    if "系列标注" in all_cols:
+                        all_cols.remove("系列标注")  # 1) 剔除可能在末尾的默认位置
+                    
+                    if "出价/竞价" in all_cols:
+                        idx = all_cols.index("出价/竞价") + 1
+                        all_cols.insert(idx, "系列标注") # 2) 强行插入到“出价/竞价”正后方
+                    else:
+                        # 兜底：若没有出价列，放在 preferred_order 后面
+                        all_cols.insert(len(preferred_order), "系列标注")
 
-                other_cols = [c for c in final_df.columns if c not in all_cols]
-                final_cols = all_cols + other_cols
-                final_df = final_df.reindex(columns=final_cols)
+                for tail_col in ["注意事项", "备注"]:
+                    if tail_col in all_cols:
+                        all_cols.remove(tail_col)
+                        all_cols.append(tail_col)
+
+                final_cols = [c for c in all_cols if c in final_df.columns]
+                other_cols = [c for c in final_df.columns if c not in final_cols] # 防止遗漏未定义的其他列
+                final_df = final_df.reindex(columns=final_cols + other_cols)
 
                 xlsx_data = write_excel_final(final_df, "品类匹配结果", params, color_by="广告账号ID")
                 st.session_state["m7_excel_bytes"] = xlsx_data

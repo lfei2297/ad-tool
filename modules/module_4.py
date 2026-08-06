@@ -86,6 +86,30 @@ def run(params):
             cols_to_hide = ["提供素材版本数量", "广告组数量", "导品系列数", "补充默认版本数"]
             final_df = final_df.drop(columns=[c for c in cols_to_hide if c in final_df.columns], errors='ignore')
             
+            # 🌟 1. 提取当前所有列名
+            all_cols = list(final_df.columns)
+
+            # 🌟 2. 重新校准【系列标注】的位置（强行插到“出价/竞价”正右侧）
+            if "系列标注" in all_cols:
+                all_cols.remove("系列标注")  # 先剥离默认排在末尾的系列标注
+                
+                if "出价/竞价" in all_cols:
+                    idx = all_cols.index("出价/竞价") + 1
+                    all_cols.insert(idx, "系列标注")  # 精准插到“出价/竞价”后面
+                else:
+                    # 兜底：若无出价列，插在第 3 列（像素ID 后面）
+                    insert_pos = min(3, len(all_cols))
+                    all_cols.insert(insert_pos, "系列标注")
+
+            # 🌟 3. 强制把【注意事项】和【备注】推到表格最右侧末尾
+            for tail_col in ["注意事项", "备注"]:
+                if tail_col in all_cols:
+                    all_cols.remove(tail_col)
+                    all_cols.append(tail_col)
+
+            # 🌟 4. 应用重新排列后的列名顺序
+            final_df = final_df.reindex(columns=all_cols)
+            
             st.success("✅ 生成完毕！")
             file_prefix = params.get("prefix", "项目_")
             xlsx_data = write_excel_final(final_df, "结构补齐结果", params)
