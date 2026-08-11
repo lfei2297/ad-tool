@@ -79,7 +79,6 @@ def allocate_main_category(
     阶段 1：全局未用的各 SKU 第 1 变体（广度 + 顺延）
     阶段 2：全局未用变体
     阶段 3：全库第一轮耗尽后，按 phase3_pointer **跨账号顺延**复用
-            （禁止每个账号都从池子开头重拿，避免账号3/4 拿到完全相同的组合）
 
     返回 (selected_items, acc_used_combos, acc_used_skus, phase3_pointer)
     """
@@ -170,13 +169,6 @@ def allocate_fallback_round_robin(
 ):
     """
     模式二 阶段 4：后备品类环形指针均摊补齐。
-
-    - 跨 SKU 环形轮询，指针跨账号接续
-    - 全局组合消耗：他号已拿的素材1，本号优先拿未用 SKU 或同 SKU 的素材2
-    - 模式二默认 strict_unique_sku=False：允许同 SKU 不同素材，禁止同 SKU 同素材
-    - 若 strict_unique_sku=True：每个 SKU 在账号内最多 1 条
-
-    返回 (selected_items, acc_used_combos, acc_used_skus, new_pointer)
     """
     fb_sku_group, fb_ordered_skus = build_depth_matrix(fb_raw_pool)
     num_fb = len(fb_ordered_skus)
@@ -184,13 +176,6 @@ def allocate_fallback_round_robin(
         return selected_items, acc_used_combos, acc_used_skus, global_fallback_pointer
 
     def _try_pick_from_sku(sku, mode):
-        """
-        mode:
-          'first_free'  — 仅当第 1 变体全局未用时取它（优先未消耗独立 SKU，如 DEF）
-          'any_free'    — 取该 SKU 任意全局未用变体（如 ABC 素材2）
-          'reuse'       — 全局已耗尽时，取账号内尚未出现过的组合
-        """
-        # 模式一风格：SKU 已在账号内则整 SKU 跳过
         if strict_unique_sku and sku in acc_used_skus:
             return False
         items = fb_sku_group[sku]
@@ -214,7 +199,6 @@ def allocate_fallback_round_robin(
                 return True
             return False
 
-        # reuse：仅拦组合重复；模式二下同 SKU 不同素材可继续拿
         for item in items:
             combo_k = make_combo_key(item)
             if combo_k in acc_used_combos:
@@ -225,8 +209,6 @@ def allocate_fallback_round_robin(
 
     def _round_robin(mode):
         nonlocal global_fallback_pointer
-        # 模式二允许同 SKU 多素材时，一圈可能多次命中同一 SKU 的不同变体，
-        # 用「连续整圈无进展」作为停止条件；上限放大到 素材总数 防止死循环
         total_slots = sum(len(v) for v in fb_sku_group.values()) or num_fb
         no_progress_streak = 0
         while len(selected_items) < target_count and no_progress_streak < max(num_fb, total_slots):
@@ -238,12 +220,9 @@ def allocate_fallback_round_robin(
             else:
                 no_progress_streak += 1
 
-    # Pass1：优先全局未用的「独立 SKU 第1变体」（DEF 优先于 ABC 素材2）
     _round_robin("first_free")
-    # Pass2：再取全局未用的其他变体（含同 SKU 素材2，模式二允许）
     if len(selected_items) < target_count:
         _round_robin("any_free")
-    # Pass3：全局干涸 → 账号内未出现过的组合复用凑满
     if len(selected_items) < target_count:
         _round_robin("reuse")
 
@@ -252,8 +231,7 @@ def allocate_fallback_round_robin(
 
 def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
     """
-    对全部账号执行匹配，返回:
-      final_rows, warning_logs, gap_summary_list
+    对全部账号执行匹配
     """
     category_sku_map = defaultdict(list)
     for r in sku_rows:
@@ -267,10 +245,8 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
 
     globally_consumed_combos = set()
     global_fallback_pointer = 0
-    # 各主品类阶段 3 复用顺延指针（跨账号接续，避免后账号从池头重拿）
     phase3_pointers = defaultdict(int)
     is_mode_two = "模式二" in run_mode
-    # 模式一：账号内 SKU 绝对不重复；模式二：仅禁止同 SKU 同素材
     strict_unique_sku = not is_mode_two
 
     for idx, acc_dict in enumerate(acc_rows):
@@ -287,27 +263,25 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
             continue
 
         raw_pool = category_sku_map.get(category, [])
-        if not raw_pool:
-            warning_logs.append(f"❓ 行 {excel_line} [账号:{acc_id}] 品类【{category}】未找到对应SKU。")
-            gap_summary_list.append({
-                "广告账号ID": acc_id,
-                "品类": category,
-                "目标数量": target_sku_count,
-                "实际获取": 0,
-                "缺口数量": target_sku_count,
-            })
-            continue
-
-        selected_items, acc_used_combos, acc_used_skus, phase3_pointers[category] = (
-            allocate_main_category(
-                raw_pool,
-                target_sku_count,
-                globally_consumed_combos,
-                strict_unique_sku=strict_unique_sku,
-                phase3_pointer=phase3_pointers[category],
+        
+        # 🌟 修改核心：即便主品类没有找到 SKU，在模式二下也不直接 continue！
+        if raw_pool:
+            selected_items, acc_used_combos, acc_used_skus, phase3_pointers[category] = (
+                allocate_main_category(
+                    raw_pool,
+                    target_sku_count,
+                    globally_consumed_combos,
+                    strict_unique_sku=strict_unique_sku,
+                    phase3_pointer=phase3_pointers[category],
+                )
             )
-        )
+        else:
+            selected_items = []
+            acc_used_combos = set()
+            acc_used_skus = set()
+            warning_logs.append(f"❓ 行 {excel_line} [账号:{acc_id}] 主品类【{category}】未找到对应SKU。")
 
+        # 🌟 模式二：当已拿到数量不够（包括主品类选出 0 个）且设置了后备品类，自动用后备补齐
         if is_mode_two and len(selected_items) < target_sku_count and fallback_category:
             fb_raw_pool = category_sku_map.get(fallback_category, [])
             if not fb_raw_pool:
@@ -324,7 +298,7 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
                         acc_used_skus,
                         globally_consumed_combos,
                         global_fallback_pointer,
-                        strict_unique_sku=False,  # 模式二后备：允许同 SKU 不同素材
+                        strict_unique_sku=False,
                     )
                 )
         elif is_mode_two and len(selected_items) < target_sku_count and not fallback_category:
@@ -452,13 +426,12 @@ def run(params):
                 
                 if "系列标注" in final_df.columns:
                     if "系列标注" in all_cols:
-                        all_cols.remove("系列标注")  # 1) 剔除可能在末尾的默认位置
+                        all_cols.remove("系列标注")
                     
                     if "出价/竞价" in all_cols:
                         idx = all_cols.index("出价/竞价") + 1
-                        all_cols.insert(idx, "系列标注") # 2) 强行插入到“出价/竞价”正后方
+                        all_cols.insert(idx, "系列标注")
                     else:
-                        # 兜底：若没有出价列，放在 preferred_order 后面
                         all_cols.insert(len(preferred_order), "系列标注")
 
                 for tail_col in ["注意事项", "备注"]:
@@ -467,7 +440,7 @@ def run(params):
                         all_cols.append(tail_col)
 
                 final_cols = [c for c in all_cols if c in final_df.columns]
-                other_cols = [c for c in final_df.columns if c not in final_cols] # 防止遗漏未定义的其他列
+                other_cols = [c for c in final_df.columns if c not in final_cols]
                 final_df = final_df.reindex(columns=final_cols + other_cols)
 
                 xlsx_data = write_excel_final(final_df, "品类匹配结果", params, color_by="广告账号ID")
