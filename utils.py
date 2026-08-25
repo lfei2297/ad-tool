@@ -310,3 +310,58 @@ def get_template_m7():
                 ws.write(0, i, col_name, header_fmt)
 
     return out.getvalue()
+
+# ─────────────────────────────────────────────
+# 7. 模块八着陆页导入模板生成器
+# ─────────────────────────────────────────────
+def get_template_m8():
+    """
+    构建模块八专用模板（包含账号表与SKU表两个Sheet）
+    """
+    acc_cols = {
+        "广告账号ID": "",
+        "主页ID": "可不填，不填则使用资产管理中的默认主页",
+        "像素ID": "可不填，不填则使用资产管理中的默认像素",
+        "真实SKU": "",
+        "虚拟SKU": "",
+        "国家": "美国/英国/德国/法国/西班牙",
+        "着陆页链接": "填写完整的商品链接",
+        "广告素材版本": "广告素材库中的具体版本名称",
+        "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
+        "系列标注": "可不填",
+        "Unnamed: 10": "此行为说明，勿删除，请从第三行开始填写"
+    }
+    
+    sku_cols = ["真实SKU", "虚拟SKU", "SKU中文名称", "国家", "广告素材版本", "广告素材ID", "创建时间"]
+
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+        # Sheet1: 账号表
+        df_acc = pd.DataFrame([acc_cols])
+        df_acc.to_excel(writer, index=False, sheet_name="账号表")
+        ws_acc = writer.sheets["账号表"]
+        
+        # Sheet2: SKU表
+        df_sku = pd.DataFrame(columns=sku_cols)
+        df_sku.to_excel(writer, index=False, sheet_name="SKU表")
+        ws_sku = writer.sheets["SKU表"]
+
+        workbook = writer.book
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1})
+        hint_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True})
+
+        # 格式化账号表
+        ws_acc.autofilter(0, 0, 0, len(acc_cols) - 1)
+        ws_acc.set_row(1, 20, hint_fmt)
+        for i, col_name in enumerate(acc_cols.keys()):
+            col_str = "" if "Unnamed" in col_name else col_name
+            ws_acc.write(0, i, col_str, header_fmt)
+            ws_acc.set_column(i, i, 22)
+
+        # 格式化SKU表
+        ws_sku.autofilter(0, 0, 0, len(sku_cols) - 1)
+        for i, col_name in enumerate(sku_cols):
+            ws_sku.write(0, i, col_name, header_fmt)
+            ws_sku.set_column(i, i, 20)
+
+    return out.getvalue()

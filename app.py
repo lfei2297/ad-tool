@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import io
 
-from utils import get_template_standard, get_template_m4, get_template_m7
-from modules import module_1, module_2, module_3, module_4, module_6, module_7
+from utils import get_template_standard, get_template_m4, get_template_m7, get_template_m8
+from modules import module_1, module_2, module_3, module_4, module_6, module_7, module_8  # 👈 引入 module_8
 from modules import asset_tool 
 import modules.module_5 as module_5
 
@@ -73,7 +73,8 @@ if main_mode == "🎨 素材批量生成":
             "模块四：补齐默认版本", 
             "模块五：循环填充与分流", 
             "模块六：多行组合循环填充",
-            "模块七：账号品类智能匹配"
+            "模块七：账号品类智能匹配",
+            "模块八：着陆页导入与素材匹配"
         ]
     )
 
@@ -90,13 +91,15 @@ if main_mode == "🎨 素材批量生成":
     st.title("🚀 广告素材批量生成工具")
     
     with st.expander("📥 点击展开/收起：快捷资源模板下载", expanded=False):
-        c_dl1, c_dl2, c_dl3 = st.columns(3)
+        c_dl1, c_dl2, c_dl3, c_dl4 = st.columns(4)
         with c_dl1:
             st.download_button("⬇️ 下载：标准素材模板", data=get_template_standard(), file_name="标准素材模板.xlsx", use_container_width=True)
         with c_dl2:
             st.download_button("⬇️ 下载：模块四专用模板", data=get_template_m4(), file_name="模块四专用模板.xlsx", use_container_width=True)
         with c_dl3:
             st.download_button("⬇️ 下载：模块七专用模板", data=get_template_m7(), file_name="模块七专用模板.xlsx", use_container_width=True)
+        with c_dl4:
+            st.download_button("⬇️ 模块八着陆页模板", data=get_template_m8(), file_name="模块八着陆页导入模板.xlsx", use_container_width=True)
 
     try:
         if mode == "模块一：基础独立拆分":
@@ -113,6 +116,8 @@ if main_mode == "🎨 素材批量生成":
             module_6.run(params)
         elif mode == "模块七：账号品类智能匹配":
             module_7.run(params)
+        elif mode == "模块八：着陆页导入与素材匹配":  # 👈 新增这一段
+            module_8.run(params)
     finally:
         params.pop('dynamic_hint', None)
         params.pop('repeat_1', None)
