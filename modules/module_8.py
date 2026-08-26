@@ -7,21 +7,67 @@ from collections import defaultdict
 from utils import safe_int
 
 # ─────────────────────────────────────────────
-# 1. 导出写入引擎（严格对齐《着陆页链接导入模板》前两行）
+# 1. 动态表头与导出写入引擎
 # ─────────────────────────────────────────────
+
+def is_landing_page_url(val_series):
+    """
+    智能检测 G 列填入的是否为网址/链接：
+    若包含 http, www, .com, /products/ 或 '/' 斜杠特征，则判定为链接；
+    否则判定为着陆页版本名称。
+    """
+    sample_vals = [
+        str(v).strip() for v in val_series.dropna() 
+        if str(v).strip() and str(v).strip().lower() != "nan"
+    ]
+    if not sample_vals:
+        return True  # 默认兜底为链接
+
+    link_indicators = [".com", ".cn", ".top", ".shop", ".net", ".org", ".site", "http://", "https://", "www.", "/products/", "/funnel/", "/"]
+    link_count = 0
+    for v in sample_vals:
+        v_lower = v.lower()
+        if any(ind in v_lower for ind in link_indicators):
+            link_count += 1
+
+    return (link_count / len(sample_vals)) >= 0.5
+
 
 def write_landing_page_excel(df_data, params):
     """
-    导出 Excel，严格对齐《着陆页链接导入模板》：
-    第 1 行：标准表头
-    第 2 行：固定说明提示行（包含 Unnamed: 10 说明）
-    第 3 行起：业务数据
+    导出 Excel，严格对齐模板结构并根据 G 列内容动态调整 G1/H1 表头：
+    - 若 G 列为链接：G1=着陆页链接, H1=广告素材版本
+    - 若 G 列为版本：G1=着陆页版本名称, H1=广告素材版本名称
     """
+    df_out = df_data.copy()
+    
+    # 查找 G 列实际对应的字段名（兼容多种历史叫法）
+    g_col_candidates = [c for c in df_out.columns if "着陆页" in c]
+    g_actual_col = g_col_candidates[0] if g_col_candidates else "着陆页链接"
+    
+    # 查找 H 列实际对应的字段名
+    h_col_candidates = [c for c in df_out.columns if "广告素材" in c or "素材版本" in c]
+    h_actual_col = h_col_candidates[0] if h_col_candidates else "广告素材版本"
+
+    # 判断是否为 URL 链接
+    is_link = is_landing_page_url(df_out[g_actual_col])
+
+    if is_link:
+        g1_header = "着陆页链接"
+        g2_hint = "填写完整的商品链接"
+        h1_header = "广告素材版本"
+        h2_hint = "广告素材库中的具体版本名称"
+    else:
+        g1_header = "着陆页版本名称"
+        g2_hint = "着陆页库中的具体版本名称"
+        h1_header = "广告素材版本名称"
+        h2_hint = "广告素材库中的具体版本名称"
+
     target_columns = [
         "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
-        "国家", "着陆页链接", "广告素材版本", "出价/竞价", "系列标注", "Unnamed: 10"
+        "国家", g1_header, h1_header, "出价/竞价", "系列标注", "Unnamed: 10"
     ]
-    
+
     hints = {
         "广告账号ID": "",
         "主页ID": "可不填，不填则使用资产管理中的默认主页",
@@ -29,16 +75,17 @@ def write_landing_page_excel(df_data, params):
         "真实SKU": "",
         "虚拟SKU": "",
         "国家": "美国/英国/德国/法国/西班牙",
-        "着陆页链接": "填写完整的商品链接",
-        "广告素材版本": "广告素材库中的具体版本名称",
+        g1_header: g2_hint,
+        h1_header: h2_hint,
         "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
         "系列标注": "可不填",
         "Unnamed: 10": "此行为说明，勿删除，请从第三行开始填写"
     }
 
-    df_out = df_data.copy()
-    
-    # 清理所有空白与 NaN
+    # 将原有数据列对齐到当前确定的动态表头上
+    df_out[g1_header] = df_out[g_actual_col]
+    df_out[h1_header] = df_out[h_actual_col]
+
     df_out = df_out.fillna("")
     for col in target_columns:
         if col not in df_out.columns:
@@ -66,7 +113,7 @@ def write_landing_page_excel(df_data, params):
             col_name_str = "" if "Unnamed" in str(col) else str(col)
             worksheet.write(0, i, col_name_str, header_fmt)
             w = max(len(col_name_str.encode('gbk', errors='ignore')) + 4, 18)
-            if col in ["着陆页链接", "广告素材版本"]:
+            if col in [g1_header, h1_header]:
                 w = 35
             elif col == "Unnamed: 10":
                 w = 32
@@ -95,7 +142,7 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
     df_sku_raw = pd.read_excel(io.BytesIO(acc_file_bytes), sheet_name="SKU表", dtype=str)
     df_sku_raw.columns = [str(c).strip() for c in df_sku_raw.columns]
     
-    mat_col = [c for c in df_sku_raw.columns if "广告素材版本" in c]
+    mat_col = [c for c in df_sku_raw.columns if "广告素材" in c or "素材版本" in c]
     mat_col_name = mat_col[0] if mat_col else "广告素材版本"
     
     df_sku_raw["SKU_KEY"] = df_sku_raw.apply(get_sku_key, axis=1)
@@ -172,15 +219,15 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
 # ─────────────────────────────────────────────
 
 def run(params):
-    st.subheader("🔗 模块八：着陆页链接导入与素材智能匹配")
+    st.subheader("🔗 模块八：着陆页导入与素材智能匹配")
 
     with st.expander("💡 点击查看：运行逻辑说明", expanded=False):
         st.markdown("""
+        - **智能识别表头**：系统会自动识别 G 列内容。若为商品链接，表头保持 `着陆页链接` 与 `广告素材版本`；若为版本名称（如优化组版本），自动切换为 `着陆页版本名称` 与 `广告素材版本名称`。
         - **数据预处理**：SKU表按 `[版本 + SKU]` 联合唯一去重，且按 `创建时间` 倒序排序（最新的优先匹配）。
         - **分表规则（1账号1SKU）**：同一张表下只允许一个账号对应一个SKU；如果同一账号有多个不同SKU，系统会自动拆分为多个子表格导出。
         - **模式一 (单组截断)**：每个账号-SKU组合仅取前 $n$ 个最新素材版本，超出部分舍弃。
         - **模式二 (全量素材)**：提取该 SKU 对应的全部素材版本，有多少取多少。
-        - **模板对齐**：导出结果严格按照《着陆页链接导入模板》表头及前两行说明结构生成。
         """)
 
     st.markdown("##### ⚙️ 1. 匹配规则与参数配置")
@@ -237,7 +284,7 @@ def run(params):
                 file_prefix = params.get("prefix", "项目_")
                 table_counts_info = {tbl: len(df) for tbl, df in result_tables.items()}
 
-                # 🌟 智能打包：若只有 1 个表直接出 .xlsx，多表则打包为 .zip
+                # 智能打包：单表直接出 .xlsx，多表打包为 .zip
                 if len(result_tables) == 1:
                     single_tbl = list(result_tables.values())[0]
                     st.session_state["m8_download_bytes"] = write_landing_page_excel(single_tbl, params)
