@@ -7,21 +7,16 @@ from collections import defaultdict
 from utils import safe_int
 
 # ─────────────────────────────────────────────
-# 1. 动态表头与导出写入引擎
+# 1. 动态表头与自适应导出引擎（免改代码自适应列，无保护锁）
 # ─────────────────────────────────────────────
 
 def is_landing_page_url(val_series):
-    """
-    智能检测 G 列填入的是否为网址/链接：
-    若包含 http, www, .com, /products/ 或 '/' 斜杠特征，则判定为链接；
-    否则判定为着陆页版本名称。
-    """
     sample_vals = [
         str(v).strip() for v in val_series.dropna() 
         if str(v).strip() and str(v).strip().lower() != "nan"
     ]
     if not sample_vals:
-        return True  # 默认兜底为链接
+        return True
 
     link_indicators = [".com", ".cn", ".top", ".shop", ".net", ".org", ".site", "http://", "https://", "www.", "/products/", "/funnel/", "/"]
     link_count = 0
@@ -33,23 +28,15 @@ def is_landing_page_url(val_series):
     return (link_count / len(sample_vals)) >= 0.5
 
 
-def write_landing_page_excel(df_data, params):
-    """
-    导出 Excel，严格对齐模板结构并根据 G 列内容动态调整 G1/H1 表头：
-    - 若 G 列为链接：G1=着陆页链接, H1=广告素材版本
-    - 若 G 列为版本：G1=着陆页版本名称, H1=广告素材版本名称
-    """
-    df_out = df_data.copy()
-    
-    # 查找 G 列实际对应的字段名（兼容多种历史叫法）
+def write_landing_page_excel(df_data, raw_hint_dict=None):
+    df_out = df_data.copy().fillna("")
+
     g_col_candidates = [c for c in df_out.columns if "着陆页" in c]
     g_actual_col = g_col_candidates[0] if g_col_candidates else "着陆页链接"
     
-    # 查找 H 列实际对应的字段名
     h_col_candidates = [c for c in df_out.columns if "广告素材" in c or "素材版本" in c]
     h_actual_col = h_col_candidates[0] if h_col_candidates else "广告素材版本"
 
-    # 判断是否为 URL 链接
     is_link = is_landing_page_url(df_out[g_actual_col])
 
     if is_link:
@@ -63,37 +50,53 @@ def write_landing_page_excel(df_data, params):
         h1_header = "广告素材版本名称"
         h2_hint = "广告素材库中的具体版本名称"
 
-    target_columns = [
-        "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
-        "国家", g1_header, h1_header, "出价/竞价", "系列标注", "Unnamed: 10"
-    ]
+    rename_dict = {}
+    if g_actual_col != g1_header:
+        rename_dict[g_actual_col] = g1_header
+    if h_actual_col != h1_header:
+        rename_dict[h_actual_col] = h1_header
+    if rename_dict:
+        df_out = df_out.rename(columns=rename_dict)
 
-    hints = {
+    current_cols = list(df_out.columns)
+    if "广告素材ID" in current_cols:
+        current_cols.remove("广告素材ID")
+        target_pos_col = h1_header if h1_header in current_cols else current_cols[min(7, len(current_cols)-1)]
+        idx = current_cols.index(target_pos_col) + 1
+        current_cols.insert(idx, "广告素材ID")
+
+    unnamed_cols = [c for c in current_cols if "Unnamed" in str(c)]
+    for uc in unnamed_cols:
+        current_cols.remove(uc)
+        current_cols.append(uc)
+
+    df_out = df_out[current_cols]
+
+    default_hints = {
         "广告账号ID": "",
         "主页ID": "可不填，不填则使用资产管理中的默认主页",
         "像素ID": "可不填，不填则使用资产管理中的默认像素",
         "真实SKU": "",
         "虚拟SKU": "",
         "国家": "美国/英国/德国/法国/西班牙",
-        g1_header: g2_hint,
-        h1_header: h2_hint,
+        "着陆页链接": "填写完整的商品链接",
+        "着陆页版本名称": "着陆页库中的具体版本名称",
+        "广告素材版本": "广告素材库中的具体版本名称",
+        "广告素材版本名称": "广告素材库中的具体版本名称",
+        "广告素材ID": "可不填，对应广告素材库中的唯一ID",
         "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
         "系列标注": "可不填",
         "Unnamed: 10": "此行为说明，勿删除，请从第三行开始填写"
     }
 
-    # 将原有数据列对齐到当前确定的动态表头上
-    df_out[g1_header] = df_out[g_actual_col]
-    df_out[h1_header] = df_out[h_actual_col]
+    final_hints = {}
+    for col in current_cols:
+        if raw_hint_dict and col in raw_hint_dict and str(raw_hint_dict[col]).strip() not in ["", "nan", "None"]:
+            final_hints[col] = raw_hint_dict[col]
+        else:
+            final_hints[col] = default_hints.get(col, "可不填" if "Unnamed" not in str(col) else "此行为说明，勿删除，请从第三行开始填写")
 
-    df_out = df_out.fillna("")
-    for col in target_columns:
-        if col not in df_out.columns:
-            df_out[col] = ""
-            
-    df_out = df_out[target_columns]
-    hint_row = pd.DataFrame([hints])
-    
+    hint_row = pd.DataFrame([final_hints])
     final_export_df = pd.concat([hint_row, df_out], ignore_index=True)
 
     out = io.BytesIO()
@@ -102,20 +105,20 @@ def write_landing_page_excel(df_data, params):
         workbook = writer.book
         worksheet = writer.sheets["Sheet1"]
         
-        # 自动筛选与格式
-        worksheet.autofilter(0, 0, 0, len(target_columns) - 1)
+        # 仅加筛选，不加保护锁，100% 自由编辑
+        worksheet.autofilter(0, 0, 0, len(current_cols) - 1)
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1})
         hint_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True})
         
         worksheet.set_row(1, 22, hint_fmt)
         
-        for i, col in enumerate(target_columns):
+        for i, col in enumerate(current_cols):
             col_name_str = "" if "Unnamed" in str(col) else str(col)
             worksheet.write(0, i, col_name_str, header_fmt)
             w = max(len(col_name_str.encode('gbk', errors='ignore')) + 4, 18)
-            if col in [g1_header, h1_header]:
-                w = 35
-            elif col == "Unnamed: 10":
+            if "着陆页" in col or "广告素材" in col:
+                w = 32
+            elif "Unnamed" in str(col):
                 w = 32
             worksheet.set_column(i, i, w)
 
@@ -127,7 +130,6 @@ def write_landing_page_excel(df_data, params):
 # ─────────────────────────────────────────────
 
 def get_sku_key(row):
-    """有效 SKU 标识：优先虚拟SKU，否则真实SKU"""
     v = str(row.get("虚拟SKU", "")).strip()
     r = str(row.get("真实SKU", "")).strip()
     if v and v.lower() != "nan":
@@ -138,42 +140,44 @@ def get_sku_key(row):
 
 
 def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
-    # 1. 读取 SKU 表并按时间倒序去重
     df_sku_raw = pd.read_excel(io.BytesIO(acc_file_bytes), sheet_name="SKU表", dtype=str)
     df_sku_raw.columns = [str(c).strip() for c in df_sku_raw.columns]
     
-    mat_col = [c for c in df_sku_raw.columns if "广告素材" in c or "素材版本" in c]
-    mat_col_name = mat_col[0] if mat_col else "广告素材版本"
+    mat_ver_col = [c for c in df_sku_raw.columns if "广告素材版本" in c or "素材版本" in c]
+    mat_ver_name = mat_ver_col[0] if mat_ver_col else "广告素材版本"
+
+    mat_id_col = [c for c in df_sku_raw.columns if "广告素材ID" in c or "素材ID" in c]
+    mat_id_name = mat_id_col[0] if mat_id_col else "广告素材ID"
     
     df_sku_raw["SKU_KEY"] = df_sku_raw.apply(get_sku_key, axis=1)
-    df_sku_raw["广告素材版本_CLEAN"] = df_sku_raw[mat_col_name].fillna("").astype(str).str.strip()
+    df_sku_raw["广告素材版本_CLEAN"] = df_sku_raw[mat_ver_name].fillna("").astype(str).str.strip()
+    df_sku_raw["广告素材ID_CLEAN"] = df_sku_raw[mat_id_name].fillna("").astype(str).str.strip() if mat_id_name in df_sku_raw.columns else ""
     
+    # 仅按创建时间排序，取消去重
     if "创建时间" in df_sku_raw.columns:
         df_sku_raw["创建时间_dt"] = pd.to_datetime(df_sku_raw["创建时间"], errors="coerce")
         df_sku_raw = df_sku_raw.sort_values(by="创建时间_dt", ascending=False)
-    
-    # [版本 + SKU] 唯一去重，保留最新素材
-    df_sku_dedup = df_sku_raw.drop_duplicates(subset=["SKU_KEY", "广告素材版本_CLEAN"], keep="first")
-    
-    sku_materials_map = defaultdict(list)
-    for _, r in df_sku_dedup.iterrows():
-        k = r["SKU_KEY"]
-        mat = r["广告素材版本_CLEAN"]
-        if k and mat:
-            sku_materials_map[k].append(mat)
 
-    # 2. 读取账号表并过滤说明行
+    sku_materials_map = defaultdict(list)
+    for _, r in df_sku_raw.iterrows():
+        k = r["SKU_KEY"]
+        mat_v = r["广告素材版本_CLEAN"]
+        mat_i = r["广告素材ID_CLEAN"]
+        if k and mat_v:
+            sku_materials_map[k].append((mat_v, mat_i))
+
     df_acc_raw = pd.read_excel(io.BytesIO(acc_file_bytes), sheet_name="账号表", dtype=str)
     df_acc_raw.columns = [str(c).strip() for c in df_acc_raw.columns]
     
+    raw_hint_dict = {}
     if len(df_acc_raw) > 0 and any("可不填" in str(v) for v in df_acc_raw.iloc[0].values):
+        raw_hint_dict = df_acc_raw.iloc[0].to_dict()
         df_acc_data = df_acc_raw.iloc[1:].copy()
     else:
         df_acc_data = df_acc_raw.copy()
         
     df_acc_data = df_acc_data.dropna(how="all", axis=0)
 
-    # 3. 按账号归集 SKU（1账号1SKU拆分机制）
     account_groups = defaultdict(list)
     for _, r in df_acc_data.iterrows():
         acc_id = str(r.get("广告账号ID", "")).strip()
@@ -182,7 +186,7 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
         account_groups[acc_id].append(r.to_dict())
 
     if not account_groups:
-        return {}
+        return {}, raw_hint_dict
 
     max_skus_per_acc = max(len(items) for items in account_groups.values())
     table_buckets = [[] for _ in range(max_skus_per_acc)]
@@ -190,7 +194,6 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
         for k, item in enumerate(items):
             table_buckets[k].append(item)
 
-    # 4. 匹配素材并生成子表
     result_tables = {}
     for t_idx, bucket in enumerate(table_buckets):
         matched_rows = []
@@ -199,23 +202,24 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
             mats = sku_materials_map.get(sku_k, [])
             
             if mode == "模式一":
-                target_mats = mats[:n_group] if mats else [""]
+                target_mats = mats[:n_group] if mats else [("", "")]
             else:
-                target_mats = mats if mats else [""]
+                target_mats = mats if mats else [("", "")]
 
-            for mat in target_mats:
+            for mat_v, mat_i in target_mats:
                 new_row = acc_item.copy()
-                new_row["广告素材版本"] = mat
+                new_row["广告素材版本"] = mat_v
+                new_row["广告素材ID"] = mat_i
                 matched_rows.append(new_row)
         
         if matched_rows:
             result_tables[f"表{t_idx + 1}"] = pd.DataFrame(matched_rows)
 
-    return result_tables
+    return result_tables, raw_hint_dict
 
 
 # ─────────────────────────────────────────────
-# 3. 页面渲染与下载
+# 3. Streamlit 页面与操作交互
 # ─────────────────────────────────────────────
 
 def run(params):
@@ -223,9 +227,10 @@ def run(params):
 
     with st.expander("💡 点击查看：运行逻辑说明", expanded=False):
         st.markdown("""
-        - **智能识别表头**：系统会自动识别 G 列内容。若为商品链接，表头保持 `着陆页链接` 与 `广告素材版本`；若为版本名称（如优化组版本），自动切换为 `着陆页版本名称` 与 `广告素材版本名称`。
-        - **数据预处理**：SKU表按 `[版本 + SKU]` 联合唯一去重，且按 `创建时间` 倒序排序（最新的优先匹配）。
-        - **分表规则（1账号1SKU）**：同一张表下只允许一个账号对应一个SKU；如果同一账号有多个不同SKU，系统会自动拆分为多个子表格导出。
+        - **免改代码列自适应**：支持用户在账号表中随意增删自定义列，系统自动 100% 原样继承导出。
+        - **时间排序与素材ID注入**：SKU表取消去重，按 `创建时间` 倒序排列（最新在前），并在素材版本后自动关联输出 `广告素材ID`。
+        - **智能识别表头**：若 G 列为商品链接，表头保持 `着陆页链接` 与 `广告素材版本`；若为版本名称，自动切换为 `着陆页版本名称` 与 `广告素材版本名称`。
+        - **分表规则（1账号1SKU）**：同一张表下只允许一个账号对应一个SKU；多 SKU 账号自动拆分为多个子表格。
         - **模式一 (单组截断)**：每个账号-SKU组合仅取前 $n$ 个最新素材版本，超出部分舍弃。
         - **模式二 (全量素材)**：提取该 SKU 对应的全部素材版本，有多少取多少。
         """)
@@ -253,7 +258,6 @@ def run(params):
     with c_right:
         up = st.file_uploader("上传包含【账号表】和【SKU表】的需求文件 (.xlsx)", type=["xlsx"], key="m8_up")
 
-    # 清除旧缓存
     if "m8_last_up" not in st.session_state or st.session_state["m8_last_up"] != (up.name if up else None):
         st.session_state["m8_last_up"] = up.name if up else None
         st.session_state.pop("m8_download_bytes", None)
@@ -272,7 +276,7 @@ def run(params):
             file_bytes = up.getvalue()
             with st.spinner("正在智能拆表并匹配最新素材..."):
                 try:
-                    result_tables = run_module_8_matching(file_bytes, n_group=int(n_group), mode=mode_key)
+                    result_tables, raw_hint_dict = run_module_8_matching(file_bytes, n_group=int(n_group), mode=mode_key)
                 except Exception as e:
                     st.error(f"⚠️ 处理失败，请检查文件格式是否正确：{e}")
                     return
@@ -284,16 +288,15 @@ def run(params):
                 file_prefix = params.get("prefix", "项目_")
                 table_counts_info = {tbl: len(df) for tbl, df in result_tables.items()}
 
-                # 智能打包：单表直接出 .xlsx，多表打包为 .zip
                 if len(result_tables) == 1:
                     single_tbl = list(result_tables.values())[0]
-                    st.session_state["m8_download_bytes"] = write_landing_page_excel(single_tbl, params)
+                    st.session_state["m8_download_bytes"] = write_landing_page_excel(single_tbl, raw_hint_dict)
                     st.session_state["m8_is_zip"] = False
                 else:
                     zip_buffer = io.BytesIO()
                     with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                         for tbl_name, df_tbl in result_tables.items():
-                            excel_bytes = write_landing_page_excel(df_tbl, params)
+                            excel_bytes = write_landing_page_excel(df_tbl, raw_hint_dict)
                             file_name = f"{file_prefix}着陆页导入_{tbl_name}.xlsx"
                             zf.writestr(file_name, excel_bytes)
                     st.session_state["m8_download_bytes"] = zip_buffer.getvalue()
