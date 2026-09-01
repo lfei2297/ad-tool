@@ -3,18 +3,14 @@ import pandas as pd
 import io
 
 from utils import get_template_standard, get_template_m4, get_template_m7, get_template_m8
-from modules import module_1, module_2, module_3, module_4, module_6, module_7, module_8  # 👈 引入 module_8
+from modules import module_1, module_2, module_3, module_4, module_6, module_7, module_8
 from modules import asset_tool 
 import modules.module_5 as module_5
 
 st.set_page_config(page_title="广告素材批量生成工具", layout="wide")
 
-# ==========================================
-# ✨ 全局精修 CSS：让侧边栏标题与折叠按钮 « 绝对水平并行
-# ==========================================
 st.markdown("""
     <style>
-        /* 1. 将侧边栏原生的 Header（包含折叠按钮 «）设为绝对定位并靠右上 */
         [data-testid="stSidebarHeader"] {
             position: absolute !important;
             top: 0.6rem !important;
@@ -24,20 +20,14 @@ st.markdown("""
             margin: 0 !important;
             background: transparent !important;
         }
-        
-        /* 2. 调整侧边栏内容区顶部外边距，使标题与右侧折叠按钮同一高度 */
         [data-testid="stSidebarUserContent"] {
             padding-top: 0.8rem !important;
         }
-        
-        /* 3. 压低侧边栏主标题与按钮对齐 */
         [data-testid="stSidebarUserContent"] h1 {
             padding-top: 0rem !important;
             margin-top: 0rem !important;
             font-size: 1.4rem !important;
         }
-
-        /* 主内容区域边距优化 */
         .block-container {
             padding-top: 1.2rem !important;
             padding-bottom: 2rem !important;
@@ -85,19 +75,16 @@ if main_mode == "🎨 素材批量生成":
 
     params = {"prefix": FILE_PREFIX, "enable_color": ENABLE_COLOR, "fast_mode": FAST_MODE}
 
-    # ==========================================
-    # ✨ 顶部大标题 + 可折叠式快捷资源下载区
-    # ==========================================
     st.title("🚀 广告素材批量生成工具")
     
     with st.expander("📥 点击展开/收起：快捷资源模板下载", expanded=False):
         c_dl1, c_dl2, c_dl3, c_dl4 = st.columns(4)
         with c_dl1:
-            st.download_button("⬇️ 下载：标准素材模板", data=get_template_standard(), file_name="标准素材模板.xlsx", use_container_width=True)
+            st.download_button("⬇️ 标准素材模板", data=get_template_standard(), file_name="标准素材模板.xlsx", use_container_width=True)
         with c_dl2:
-            st.download_button("⬇️ 下载：模块四专用模板", data=get_template_m4(), file_name="模块四专用模板.xlsx", use_container_width=True)
+            st.download_button("⬇️ 模块四专用模板", data=get_template_m4(), file_name="模块四专用模板.xlsx", use_container_width=True)
         with c_dl3:
-            st.download_button("⬇️ 下载：模块七专用模板", data=get_template_m7(), file_name="模块七专用模板.xlsx", use_container_width=True)
+            st.download_button("⬇️ 模块七专用模板", data=get_template_m7(), file_name="模块七专用模板.xlsx", use_container_width=True)
         with c_dl4:
             st.download_button("⬇️ 模块八着陆页模板", data=get_template_m8(), file_name="模块八着陆页导入模板.xlsx", use_container_width=True)
 
@@ -116,7 +103,7 @@ if main_mode == "🎨 素材批量生成":
             module_6.run(params)
         elif mode == "模块七：账号品类智能匹配":
             module_7.run(params)
-        elif mode == "模块八：着陆页导入与素材匹配":  # 👈 新增这一段
+        elif mode == "模块八：着陆页导入与素材匹配":
             module_8.run(params)
     finally:
         params.pop('dynamic_hint', None)

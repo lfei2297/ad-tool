@@ -143,12 +143,9 @@ def write_excel_final(df, sheet_name, params, is_m3=False, color_by=None):
             workbook, worksheet = writer.book, writer.sheets[sheet_name]
             
             num_rows, num_cols = df_out.shape
-            
-            # 自动筛选，但不开启 protect 锁
             worksheet.autofilter(0, 0, 0, num_cols - 1)
 
             if not params.get('fast_mode', False):
-                # 列宽高精度计算
                 for i, col in enumerate(df_out.columns):
                     gbk_len = len(str(col).encode('gbk', errors='ignore'))
                     worksheet.set_column(i, i, max(gbk_len + 4, 15))
@@ -201,7 +198,7 @@ def create_zip_package(tasks_dict, params, total_excel_bytes=None):
     return zip_b.getvalue()
 
 # ==========================================
-# 6. 通用标准模板生成器
+# 6. 通用标准模板生成器（彻底取消保护锁）
 # ==========================================
 def build_template(columns_dict, sheet_name):
     df = pd.DataFrame([columns_dict])
@@ -212,14 +209,12 @@ def build_template(columns_dict, sheet_name):
         workbook = writer.book
         worksheet = writer.sheets[sheet_name]
         
+        # 仅开启自动筛选，彻底移除 worksheet.protect()
         worksheet.autofilter(0, 0, 0, len(columns_dict) - 1)
-        worksheet.protect('', {'autofilter': True, 'sort': True, 'format_columns': True})
         
-        unlocked_fmt = workbook.add_format({'locked': False})
-        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1, 'locked': True})
-        warning_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True, 'locked': True})
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1})
+        warning_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True})
         
-        worksheet.set_column(0, 100, 18, unlocked_fmt)
         worksheet.set_row(1, 18)
         
         for i, (col_name, hint_text) in enumerate(columns_dict.items()):
@@ -231,7 +226,7 @@ def build_template(columns_dict, sheet_name):
             else:
                 col_width = max(header_width + 4, 15)
                 
-            worksheet.set_column(i, i, col_width, unlocked_fmt)
+            worksheet.set_column(i, i, col_width)
             worksheet.write(0, i, col_name, header_fmt)
             worksheet.write(1, i, str(hint_text), warning_fmt)
             
@@ -265,7 +260,7 @@ def get_template_m4():
         "着陆页版本名称": "", 
         "广告素材版本名称": "", 
         "提供素材版本数量": "", 
-        "广告组数量": "填实际组数 (默认1)",         # ✨ 补齐：广告组数量
+        "广告组数量": "填实际组数 (默认1)",
         "导品系列数": "填系列数 (默认1)", 
         "补充默认版本数": "校验用，可填0", 
         "出价/竞价": "",
@@ -274,36 +269,24 @@ def get_template_m4():
     }, sheet_name="模块四模板")
     
 def get_template_m7():
-    """
-    构建模块七专用模板（包含账号表与SKU表两个Sheet，取消第二行说明行，全表可自由编辑）
-    """
     acc_cols = ["资产", "账号ID", "主页ID", "像素ID", "品类", "需要组合的SKU数量", "系列标注"]
     sku_cols = ["真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "商品分类", "出价/竞价"]
 
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-        # Sheet1: 账号表
         df_acc = pd.DataFrame(columns=acc_cols)
         df_acc.to_excel(writer, index=False, sheet_name="账号表")
         ws_acc = writer.sheets["账号表"]
         
-        # Sheet2: SKU表
         df_sku = pd.DataFrame(columns=sku_cols)
         df_sku.to_excel(writer, index=False, sheet_name="SKU表")
         ws_sku = writer.sheets["SKU表"]
 
         workbook = writer.book
-        header_fmt = workbook.add_format({
-            'bold': True, 
-            'bg_color': '#E0E0E0', 
-            'border': 1
-        })
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1})
 
         for ws, cols in [(ws_acc, acc_cols), (ws_sku, sku_cols)]:
-            # 仅在第 1 行（表头）开启自动筛选，不加 protect() 锁，全表自由编辑
             ws.autofilter(0, 0, 0, len(cols) - 1)
-            
-            # 设置漂亮的默认列宽与表头样式
             for i, col_name in enumerate(cols):
                 w = max(len(str(col_name).encode('gbk', errors='ignore')) + 6, 18)
                 ws.set_column(i, i, w)
@@ -311,12 +294,9 @@ def get_template_m7():
 
     return out.getvalue()
 
-# ─────────────────────────────────────────────
-# 7. 模块八着陆页导入模板生成器
-# ─────────────────────────────────────────────
 def get_template_m8():
     """
-    构建模块八专用模板（包含账号表与SKU表两个Sheet）
+    构建模块八专用模板（包含账号表与SKU表，加入广告素材ID，取消锁定）
     """
     acc_cols = {
         "广告账号ID": "",
@@ -327,6 +307,7 @@ def get_template_m8():
         "国家": "美国/英国/德国/法国/西班牙",
         "着陆页链接": "填写完整的商品链接",
         "广告素材版本": "广告素材库中的具体版本名称",
+        "广告素材ID": "产品素材库中具体的广告素材ID；广告素材版本名称和广告素材ID这两列二选一，均可不填",
         "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
         "系列标注": "可不填",
         "Unnamed: 10": "此行为说明，勿删除，请从第三行开始填写"
@@ -336,12 +317,10 @@ def get_template_m8():
 
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
-        # Sheet1: 账号表
         df_acc = pd.DataFrame([acc_cols])
         df_acc.to_excel(writer, index=False, sheet_name="账号表")
         ws_acc = writer.sheets["账号表"]
         
-        # Sheet2: SKU表
         df_sku = pd.DataFrame(columns=sku_cols)
         df_sku.to_excel(writer, index=False, sheet_name="SKU表")
         ws_sku = writer.sheets["SKU表"]
@@ -350,7 +329,6 @@ def get_template_m8():
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1})
         hint_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True})
 
-        # 格式化账号表
         ws_acc.autofilter(0, 0, 0, len(acc_cols) - 1)
         ws_acc.set_row(1, 20, hint_fmt)
         for i, col_name in enumerate(acc_cols.keys()):
@@ -358,7 +336,6 @@ def get_template_m8():
             ws_acc.write(0, i, col_str, header_fmt)
             ws_acc.set_column(i, i, 22)
 
-        # 格式化SKU表
         ws_sku.autofilter(0, 0, 0, len(sku_cols) - 1)
         for i, col_name in enumerate(sku_cols):
             ws_sku.write(0, i, col_name, header_fmt)
