@@ -7,7 +7,7 @@ from collections import defaultdict
 from utils import safe_int
 
 # ─────────────────────────────────────────────
-# 1. 动态表头与自适应导出引擎（免改代码自适应列，无保护锁）
+# 1. 动态表头与自适应导出引擎
 # ─────────────────────────────────────────────
 
 def is_landing_page_url(val_series):
@@ -31,33 +31,37 @@ def is_landing_page_url(val_series):
 def write_landing_page_excel(df_data, raw_hint_dict=None):
     df_out = df_data.copy().fillna("")
 
+    # 1. 识别 G 列与 H 列
     g_col_candidates = [c for c in df_out.columns if "着陆页" in c]
     g_actual_col = g_col_candidates[0] if g_col_candidates else "着陆页链接"
     
-    h_col_candidates = [c for c in df_out.columns if "广告素材" in c or "素材版本" in c]
-    h_actual_col = h_col_candidates[0] if h_col_candidates else "广告素材版本"
-
     is_link = is_landing_page_url(df_out[g_actual_col])
 
+    # G 列动态切换，H 列统一锁定为【广告素材版本名称】
     if is_link:
         g1_header = "着陆页链接"
         g2_hint = "填写完整的商品链接"
-        h1_header = "广告素材版本"
-        h2_hint = "广告素材库中的具体版本名称"
     else:
         g1_header = "着陆页版本名称"
         g2_hint = "着陆页库中的具体版本名称"
-        h1_header = "广告素材版本名称"
-        h2_hint = "广告素材库中的具体版本名称"
 
-    rename_dict = {}
+    h1_header = "广告素材版本名称"
+    h2_hint = "广告素材库中的具体版本名称"
+
+    # 更名 G 列（如果有差异）
     if g_actual_col != g1_header:
-        rename_dict[g_actual_col] = g1_header
-    if h_actual_col != h1_header:
-        rename_dict[h_actual_col] = h1_header
-    if rename_dict:
-        df_out = df_out.rename(columns=rename_dict)
+        df_out = df_out.rename(columns={g_actual_col: g1_header})
 
+    # 🌟 核心防错：彻底删除历史旧的【广告素材版本】列，防止与【广告素材版本名称】重名冲突
+    if "广告素材版本" in df_out.columns and "广告素材版本名称" in df_out.columns:
+        df_out = df_out.drop(columns=["广告素材版本"])
+    elif "广告素材版本" in df_out.columns:
+        df_out = df_out.rename(columns={"广告素材版本": h1_header})
+
+    # 🌟 列名强制去重（仅保留第一次出现的同名列）
+    df_out = df_out.loc[:, ~df_out.columns.duplicated()].copy()
+
+    # 2. 动态调整列顺序：确保【广告素材ID】紧跟在【广告素材版本名称】正后方
     current_cols = list(df_out.columns)
     if "广告素材ID" in current_cols:
         current_cols.remove("广告素材ID")
@@ -65,6 +69,7 @@ def write_landing_page_excel(df_data, raw_hint_dict=None):
         idx = current_cols.index(target_pos_col) + 1
         current_cols.insert(idx, "广告素材ID")
 
+    # 确保 Unnamed 说明列排在最后
     unnamed_cols = [c for c in current_cols if "Unnamed" in str(c)]
     for uc in unnamed_cols:
         current_cols.remove(uc)
@@ -72,6 +77,7 @@ def write_landing_page_excel(df_data, raw_hint_dict=None):
 
     df_out = df_out[current_cols]
 
+    # 3. 构造提示行 (Hints)
     default_hints = {
         "广告账号ID": "",
         "主页ID": "可不填，不填则使用资产管理中的默认主页",
@@ -81,9 +87,8 @@ def write_landing_page_excel(df_data, raw_hint_dict=None):
         "国家": "美国/英国/德国/法国/西班牙",
         "着陆页链接": "填写完整的商品链接",
         "着陆页版本名称": "着陆页库中的具体版本名称",
-        "广告素材版本": "广告素材库中的具体版本名称",
-        "广告素材版本名称": "产品库中的具体广告素材版本名称，会取该版本下最新的一条广告素材；广告素材版本名称和广告素材ID这两列二选一，均可不填",
-        "广告素材ID": "产品素材库中具体的广告素材ID；广告素材版本名称和广告素材ID这两列二选一，均可不填",
+        "广告素材版本名称": "广告素材库中的具体版本名称",
+        "广告素材ID": "可不填，对应广告素材库中的唯一ID",
         "出价/竞价": "如需指定“真实/虚拟SKU”与“出价/竞价”的关系，请填写，最多2位小数，可不填，不填则全不填，填了则全填",
         "系列标注": "可不填",
         "Unnamed: 10": "此行为说明，勿删除，请从第三行开始填写"
@@ -97,6 +102,9 @@ def write_landing_page_excel(df_data, raw_hint_dict=None):
             final_hints[col] = default_hints.get(col, "可不填" if "Unnamed" not in str(col) else "此行为说明，勿删除，请从第三行开始填写")
 
     hint_row = pd.DataFrame([final_hints])
+    
+    # 保证 hint_row 与 df_out 列完全一致且无重复
+    hint_row = hint_row.reindex(columns=df_out.columns)
     final_export_df = pd.concat([hint_row, df_out], ignore_index=True)
 
     out = io.BytesIO()
@@ -105,7 +113,6 @@ def write_landing_page_excel(df_data, raw_hint_dict=None):
         workbook = writer.book
         worksheet = writer.sheets["Sheet1"]
         
-        # 仅加筛选，不加保护锁，100% 自由编辑
         worksheet.autofilter(0, 0, 0, len(current_cols) - 1)
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#E0E0E0', 'border': 1})
         hint_fmt = workbook.add_format({'bg_color': '#FFFFCC', 'font_color': 'red', 'bold': True})
@@ -153,7 +160,6 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
     df_sku_raw["广告素材版本_CLEAN"] = df_sku_raw[mat_ver_name].fillna("").astype(str).str.strip()
     df_sku_raw["广告素材ID_CLEAN"] = df_sku_raw[mat_id_name].fillna("").astype(str).str.strip() if mat_id_name in df_sku_raw.columns else ""
     
-    # 仅按创建时间排序，取消去重
     if "创建时间" in df_sku_raw.columns:
         df_sku_raw["创建时间_dt"] = pd.to_datetime(df_sku_raw["创建时间"], errors="coerce")
         df_sku_raw = df_sku_raw.sort_values(by="创建时间_dt", ascending=False)
@@ -208,7 +214,9 @@ def run_module_8_matching(acc_file_bytes, n_group=50, mode="模式一"):
 
             for mat_v, mat_i in target_mats:
                 new_row = acc_item.copy()
-                new_row["广告素材版本"] = mat_v
+                # 🌟 清理可能存在的旧字段名，避免字典中重复
+                new_row.pop("广告素材版本", None)
+                new_row["广告素材版本名称"] = mat_v
                 new_row["广告素材ID"] = mat_i
                 matched_rows.append(new_row)
         
@@ -227,9 +235,9 @@ def run(params):
 
     with st.expander("💡 点击查看：运行逻辑说明", expanded=False):
         st.markdown("""
+        - **表头规范**：H 列统一生成为 `广告素材版本名称`；G 列若为商品链接则为 `着陆页链接`，若为版本名称则切换为 `着陆页版本名称`。
         - **免改代码列自适应**：支持用户在账号表中随意增删自定义列，系统自动 100% 原样继承导出。
         - **时间排序与素材ID注入**：SKU表取消去重，按 `创建时间` 倒序排列（最新在前），并在素材版本后自动关联输出 `广告素材ID`。
-        - **智能识别表头**：若 G 列为商品链接，表头保持 `着陆页链接` 与 `广告素材版本`；若为版本名称，自动切换为 `着陆页版本名称` 与 `广告素材版本名称`。
         - **分表规则（1账号1SKU）**：同一张表下只允许一个账号对应一个SKU；多 SKU 账号自动拆分为多个子表格。
         - **模式一 (单组截断)**：每个账号-SKU组合仅取前 $n$ 个最新素材版本，超出部分舍弃。
         - **模式二 (全量素材)**：提取该 SKU 对应的全部素材版本，有多少取多少。
