@@ -63,18 +63,32 @@ def write_landing_page_excel(df_data, raw_hint_dict=None):
 
     # 2. 动态调整列顺序：确保【广告素材ID】紧跟在【广告素材版本名称】正后方
     current_cols = list(df_out.columns)
-    if "广告素材ID" in current_cols:
-        current_cols.remove("广告素材ID")
-        target_pos_col = h1_header if h1_header in current_cols else current_cols[min(7, len(current_cols)-1)]
-        idx = current_cols.index(target_pos_col) + 1
-        current_cols.insert(idx, "广告素材ID")
+    # if "广告素材ID" in current_cols:
+    #     current_cols.remove("广告素材ID")
+    #     target_pos_col = h1_header if h1_header in current_cols else current_cols[min(7, len(current_cols)-1)]
+    #     idx = current_cols.index(target_pos_col) + 1
+    #     current_cols.insert(idx, "广告素材ID")
 
-    # 确保 Unnamed 说明列排在最后
+    # # 确保 Unnamed 说明列排在最后
+    # unnamed_cols = [c for c in current_cols if "Unnamed" in str(c)]
+    # for uc in unnamed_cols:
+    #     current_cols.remove(uc)
+    #     current_cols.append(uc)
+
+    # df_out = df_out[current_cols]
+    # 定义你期望的绝对标准顺序骨架
+    standard_skeleton = [
+        "广告账号ID", "主页ID", "像素ID", "真实SKU", "虚拟SKU", 
+        "国家", g1_header, h1_header, "广告素材ID", "出价/竞价", "系列标注"
+    ]
+    
+    # 重新排列：把存在的标准列按顺序排在前面，其余自定义扩展列按原样追加在后面
+    ordered_cols = [c for c in standard_skeleton if c in current_cols]
+    extra_cols = [c for c in current_cols if c not in standard_skeleton and "Unnamed" not in str(c)]
     unnamed_cols = [c for c in current_cols if "Unnamed" in str(c)]
-    for uc in unnamed_cols:
-        current_cols.remove(uc)
-        current_cols.append(uc)
-
+    
+    # 最终组合：标准列 + 用户自定义扩展列 + 说明列（放在最右侧）
+    current_cols = ordered_cols + extra_cols + unnamed_cols
     df_out = df_out[current_cols]
 
     # 3. 构造提示行 (Hints)
