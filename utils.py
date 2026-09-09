@@ -273,7 +273,7 @@ def get_template_m4():
     
 def get_template_m7():
     acc_cols = ["资产", "账号ID", "主页ID", "像素ID", "品类", "需要组合的SKU数量", "系列标注"]
-    sku_cols = ["真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "商品分类", "广告素材ID" "出价/竞价"]
+    sku_cols = ["真实SKU", "虚拟SKU", "国家", "着陆页版本名称", "广告素材版本名称", "商品分类", "广告素材ID", "出价/竞价"]
 
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
