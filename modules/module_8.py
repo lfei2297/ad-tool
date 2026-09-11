@@ -805,18 +805,18 @@ def run(params):
   - **SKU组**（紧挨系列标注后）：仅模式四 / 五使用，填 `1`、`2`、`3`… 同一账号下相同数字进入**同一个系列**；整列留空 = 该账号全部 SKU 为一组。不要用「系列标注」来分组。`SKU组` 只用于拆组，**导出时不带出**。
 
   **2. 配置参数与提取模式**（先选场景，再选提取方式）
-  - **每组素材上限 n**：默认 50，可改。模式一 / 三是单 SKU 截断上限；模式四是该组合计条数上限；模式五是导品时的「广告数」，超了不拆文件。
-  - **单个SKU上限**：仅多品显示，默认 50。每个 SKU 只取最新的前若干条。
+  - **每组素材上限 n**：默认 50，可改。模式一 / 三是单 SKU 截断上限；模式四是该组合计条数上限；模式五是导品时单个系列的广告数上限，超了不拆文件。
+  - **限制单个SKU上限**：仅多品显示。默认不勾选、不限制每个 SKU 条数。勾选后才出现数字框（默认 20），每个 SKU 只取最新的前若干条。不勾选时模式五才是该 SKU 全量；勾选后再开模式五，只是「每个 SKU 截完后的全量进一张表」。
   - **导入填入列**：结果里「广告素材版本名称」「广告素材ID」两列都保留，**内容只填选中的那一列**，另一列留空，导品时不必再手动删列。
 
   **单品多素材**
   - **模式一 · 单组截断**：每个账号-SKU 只取按创建时间倒序的最新前 n 条，超过 n 的旧素材舍弃。一张表里同一账号只能有 1 个 SKU。
   - **模式二 · 全量提取**：该 SKU 有多少素材导多少。一张表里同一账号只能有 1 个 SKU。
-  - **模式三 · 同素材数合表**：仍是「一账号一品一系列」。相同素材条数的 SKU 放进同一张**文件**，少出几张表；每张表每个账号最多再挂 **1 个素材更少的 SKU**。导品时中台广告数 = 文件名里的素材数，允许品不足。
+  - **模式三 · 同素材数合表**：仍是「一账号一品一系列」。相同素材条数的 SKU 放进同一张**文件**，少出几张表；每张表每个账号最多再挂 **1 个素材更少的 SKU**。导品时中台广告数 = 文件名里的底座素材数，允许品不足。拆表时每个账号在这张表里是：先写底座（该账号下这一档同条数 SKU），再写尾缀（若该账号也有挂在这张表上的那 1 个更小品）。
 
   **多品多素材**
   - **模式四 · 单组截断**：同一 `SKU组` 的多个 SKU 打进**同一个系列**，素材轮流均分，合计最多 n 条。SKU 个数大于 n 时，按表中顺序取前 n 个 SKU、每个 1 条最新素材。
-  - **模式五 · 全量提取**：同一 `SKU组` 的素材全部放在**同一张表**（单个 SKU 仍受「单个SKU上限」约束）。同一账号超过 n 条时**不拆文件**；导品设广告数 = n 并勾选继续创建，中台会在同账号下开下一系列。
+  - **模式五 · 全量提取**：同一 `SKU组` 的素材全部放在**同一张表**。默认不截单个 SKU；仅当勾选「限制单个SKU上限」时，每个 SKU 先只留最新 N 条，再全部放进这一张表。同一账号超过 n 条时**不拆文件**；导品设广告数 = n 并勾选继续创建，中台会在同账号下开下一系列。
   - 一个账号有多组：`SKU组` 填 1、2、3… **一组 = 一个系列 / 一个文件**。组与组不会混进同一系列，也不走模式三那种「按素材数拼表」。
 
   **3. 核心处理与分表原则**
@@ -867,7 +867,7 @@ def run(params):
                     "模式五：全量提取",
                 ],
                 index=0,
-                help="同一 SKU组 的多个 SKU 进入同一个系列并均分素材。模式四合计最多 n 条；模式五全量放同一张表，超 n 导品时同账号续创建下一系列。多组请在账号表「SKU组」填 1、2、3。",
+                help="同一 SKU组 的多个 SKU 进入同一个系列并均分素材。模式四合计最多 n 条；模式五默认全量放同一张表（不截单个 SKU），超 n 导品时同账号续创建下一系列。需要限每个 SKU 条数时再勾选「限制单个SKU上限」。",
             )
     with c_keep:
         keep_material_label = st.radio(
@@ -894,11 +894,12 @@ def run(params):
         if scene == "多品多素材"
         else "模式一：每个 SKU 最多 n 条；模式三：先按 n 截断，再把相同条数的品合成一张表"
     )
+    enable_per_sku = bool(st.session_state.get("m8_enable_per_sku", False)) if scene == "多品多素材" else False
     if scene == "多品多素材":
-        c_up, c_n, c_cap = st.columns([1.4, 0.8, 0.8], gap="medium")
+        c_up, c_n, c_opt = st.columns([1.45, 0.7, 1.2], gap="medium", vertical_alignment="bottom")
     else:
-        c_up, c_n = st.columns(2, gap="medium")
-        c_cap = None
+        c_up, c_n = st.columns(2, gap="medium", vertical_alignment="bottom")
+        c_opt = None
     with c_up:
         up = st.file_uploader(
             "上传需求文件（账号表 + SKU表）",
@@ -916,18 +917,34 @@ def run(params):
             help=n_help,
         )
     per_sku_limit = None
-    if c_cap is not None:
-        with c_cap:
-            per_sku_limit = st.number_input(
-                "单个SKU上限",
-                min_value=1,
-                max_value=500,
-                value=50,
-                step=1,
-                help="每个 SKU 最多导入这么多条素材（取最新）。超过则截断。默认 50。",
-                key="m8_per_sku",
-            )
-        per_sku_limit = int(per_sku_limit)
+    if c_opt is not None:
+        with c_opt:
+            if enable_per_sku:
+                c_chk, c_cap = st.columns([1.05, 0.95], gap="small", vertical_alignment="bottom")
+                with c_chk:
+                    enable_per_sku = st.checkbox(
+                        "限制单个SKU上限",
+                        value=False,
+                        key="m8_enable_per_sku",
+                        help="不勾选：每个 SKU 有多少素材用多少（模式五才是真全量）。勾选后每个 SKU 只取最新的前 N 条。",
+                    )
+                with c_cap:
+                    per_sku_limit = int(st.number_input(
+                        "单个SKU上限",
+                        min_value=1,
+                        max_value=500,
+                        value=20,
+                        step=1,
+                        help="每个 SKU 最多导入这么多条（取最新）。模式五勾选后不再是该 SKU 的全部素材。",
+                        key="m8_per_sku",
+                    ))
+            else:
+                enable_per_sku = st.checkbox(
+                    "限制单个SKU上限",
+                    value=False,
+                    key="m8_enable_per_sku",
+                    help="不勾选：每个 SKU 有多少素材用多少（模式五才是真全量）。勾选后每个 SKU 只取最新的前 N 条。",
+                )
 
     cache_sig = (up.name if up else None, keep_material_col, mode_key, int(n_group), per_sku_limit)
     if st.session_state.get("m8_last_sig") != cache_sig:
