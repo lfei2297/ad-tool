@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模块七详解：账号品类匹配与智能SKU组合</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --card: #1a2332;
+    --card2: #1e2a3a;
+    --border: #2d3f55;
+    --accent: #4fc3f7;
+    --accent2: #81d4fa;
+    --green: #69f0ae;
+    --orange: #ffb74d;
+    --red: #ef5350;
+    --purple: #ce93d8;
+    --text: #e8edf4;
+    --muted: #7a8fa6;
+    --code-bg: #0d1b2a;
+    --code-border: #1b3a5c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #0d1b2a 0%, #1a2a40 60%, #0d2035 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 40px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(79,195,247,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-badge {
+    display: inline-block;
+    background: rgba(79,195,247,0.12);
+    border: 1px solid rgba(79,195,247,0.3);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  header h1 {
+    font-size: 2.2em;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+  .header-desc {
+    color: var(--muted);
+    font-size: 1.05em;
+    max-width: 700px;
+  }
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .header-meta span {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .header-meta span::before {
+    content: '●';
+    color: var(--accent);
+    font-size: 8px;
+  }
+
+  /* ── LAYOUT ── */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── NAV TABS ── */
+  .tab-nav {
+    display: flex;
+    gap: 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 6px;
+    margin-bottom: 36px;
+    overflow-x: auto;
+  }
+  .tab-btn {
+    padding: 10px 22px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #0d1b2a;
+    font-weight: 600;
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    margin-bottom: 24px;
+  }
+  .card h2 {
+    font-size: 1.15em;
+    font-weight: 600;
+    color: var(--accent2);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+  .card h2 .icon { font-size: 1.2em; }
+  .card h3 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--text);
+    margin: 20px 0 10px;
+  }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 20px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .flow-step {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 140px;
+    flex: 1;
+  }
+  .flow-step.phase1 { border-color: rgba(105,240,174,0.4); background: rgba(105,240,174,0.05); }
+  .flow-step.phase2 { border-color: rgba(255,183,77,0.4); background: rgba(255,183,77,0.05); }
+  .flow-step.phase3 { border-color: rgba(206,147,216,0.4); background: rgba(206,147,216,0.05); }
+  .flow-step.phase4 { border-color: rgba(239,83,80,0.4); background: rgba(239,83,80,0.05); }
+  .flow-step .step-num {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .phase1 .step-num { color: var(--green); }
+  .phase2 .step-num { color: var(--orange); }
+  .phase3 .step-num { color: var(--purple); }
+  .phase4 .step-num { color: var(--red); }
+  .flow-step .step-title {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .flow-step .step-desc {
+    font-size: 0.78em;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .flow-arrow {
+    font-size: 1.4em;
+    color: var(--border);
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── CODE BLOCK ── */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 14px 0;
+    overflow-x: auto;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+  }
+  .code-block .ln { color: var(--muted); user-select: none; min-width: 32px; display: inline-block; }
+  .code-comment { color: #546e7a; font-style: italic; }
+  .code-def { color: #82b1ff; }
+  .code-str { color: #c3e88d; }
+  .code-kw { color: #f07178; }
+  .code-func { color: #82aaff; }
+  .code-var { color: var(--text); }
+  .code-op { color: #89ddff; }
+
+  /* ── LINE EXPLANATION TABLE ── */
+  .code-table { width: 100%; border-collapse: collapse; }
+  .code-table th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--card2);
+    border-bottom: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .code-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(45,63,85,0.5);
+    vertical-align: top;
+    font-size: 13.5px;
+  }
+  .code-table tr:hover td { background: rgba(79,195,247,0.03); }
+  .code-table .ln-col {
+    width: 44px;
+    color: var(--muted);
+    font-family: monospace;
+    font-size: 12px;
+    text-align: right;
+    padding-right: 16px;
+    user-select: none;
+  }
+  .code-table .code-col { width: 220px; }
+  .code-table code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: var(--accent2);
+    font-family: 'Cascadia Code', monospace;
+    white-space: nowrap;
+  }
+  .code-table .exp-col { color: var(--text); line-height: 1.6; }
+  .code-table .exp-col .tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .tag-util { background: rgba(79,195,247,0.12); color: var(--accent); }
+  .tag-core { background: rgba(105,240,174,0.12); color: var(--green); }
+  .tag-ui { background: rgba(206,147,216,0.12); color: var(--purple); }
+  .tag-import { background: rgba(255,183,77,0.12); color: var(--orange); }
+  .tag-algo { background: rgba(239,83,80,0.12); color: var(--red); }
+
+  /* ── STATS GRID ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .stat-card {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+  .stat-card .num {
+    font-size: 2em;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .stat-card .label { font-size: 13px; color: var(--muted); }
+  .stat-card.green .num { color: var(--green); }
+  .stat-card.orange .num { color: var(--orange); }
+  .stat-card.red .num { color: var(--red); }
+  .stat-card.blue .num { color: var(--accent); }
+  .stat-card.purple .num { color: var(--purple); }
+
+  /* ── MODE COMPARISON ── */
+  .mode-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  @media (max-width: 640px) { .mode-compare { grid-template-columns: 1fr; } }
+  .mode-box {
+    background: var(--card2);
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid var(--border);
+  }
+  .mode-box h3 { margin-top: 0 !important; }
+  .mode-box h3 span { font-size: 0.85em; opacity: 0.7; font-weight: 400; }
+  .mode-box .mode-tag {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+  .mode-box.m1 .mode-tag { background: rgba(105,240,174,0.15); color: var(--green); }
+  .mode-box.m2 .mode-tag { background: rgba(79,195,247,0.15); color: var(--accent); }
+  .mode-box ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .mode-box ul li {
+    padding: 6px 0;
+    font-size: 13.5px;
+    color: var(--muted);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .mode-box ul li::before { content: '→'; color: var(--accent); flex-shrink: 0; }
+
+  /* ── ARCH DIAGRAM ── */
+  .arch-diagram {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .arch-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .arch-node {
+    padding: 14px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    min-width: 100px;
+  }
+  .arch-node.input { background: rgba(255,183,77,0.1); border: 1px solid rgba(255,183,77,0.3); color: var(--orange); }
+  .arch-node.process { background: rgba(79,195,247,0.1); border: 1px solid rgba(79,195,247,0.3); color: var(--accent); }
+  .arch-node.output { background: rgba(105,240,174,0.1); border: 1px solid rgba(105,240,174,0.3); color: var(--green); }
+  .arch-arrow { color: var(--border); font-size: 1.2em; }
+
+  /* ── VARIABLE TABLE ── */
+  .var-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .var-item {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .var-item code {
+    color: var(--accent2);
+    font-size: 13px;
+    font-family: 'Cascadia Code', monospace;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .var-item .desc { font-size: 13px; color: var(--muted); }
+
+  /* ── PHASE DETAIL ── */
+  .phase-section {
+    margin: 28px 0;
+    padding: 24px;
+    border-radius: 12px;
+    border: 1px solid;
+  }
+  .phase-section.phase1 { background: rgba(105,240,174,0.04); border-color: rgba(105,240,174,0.2); }
+  .phase-section.phase2 { background: rgba(255,183,77,0.04); border-color: rgba(255,183,77,0.2); }
+  .phase-section.phase3 { background: rgba(206,147,216,0.04); border-color: rgba(206,147,216,0.2); }
+  .phase-section.phase4 { background: rgba(239,83,80,0.04); border-color: rgba(239,83,80,0.2); }
+  .phase-section h3 {
+    font-size: 1.05em;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .phase1 h3 { color: var(--green); }
+  .phase2 h3 { color: var(--orange); }
+  .phase3 h3 { color: var(--purple); }
+  .phase4 h3 { color: var(--red); }
+  .phase-section p { color: var(--muted); font-size: 13.5px; margin-bottom: 14px; }
+  .phase-section pre {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-family: 'Cascadia Code', monospace;
+    font-size: 12.5px;
+    color: var(--text);
+    overflow-x: auto;
+    line-height: 1.7;
+  }
+
+  /* ── HIGHLIGHT ── */
+  .highlight-box {
+    background: rgba(79,195,247,0.07);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .highlight-box strong { color: var(--accent); }
+
+  /* ── FUNC CARD ── */
+  .func-card {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .func-card .sig {
+    font-family: 'Cascadia Code', monospace;
+    font-size: 13px;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+  .func-card .purpose { font-size: 13.5px; color: var(--muted); }
+
+  /* ── SECTION DIVIDER ── */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 32px 0 24px;
+  }
+  .section-divider::before, .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .section-divider span {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    white-space: nowrap;
+  }
+
+  /* ── BACK TO TOP ── */
+  #top-btn {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    width: 42px;
+    height: 42px;
+    background: var(--accent);
+    color: #0d1b2a;
+    border: none;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(79,195,247,0.3);
+    transition: opacity 0.2s;
+    font-family: inherit;
+  }
+  #top-btn:hover { opacity: 0.85; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-badge">Module 07</div>
+  <h1>账号品类匹配与智能SKU组合</h1>
+  <p class="header-desc">将 SKU 资源池按品类智能分配给多个广告账号，通过三阶段算法确保账号间组合不重复、覆盖最大化，并支持双模式补齐策略。</p>
+  <div class="header-meta">
+    <span>文件：module_7.py</span>
+    <span>技术栈：Python + Streamlit</span>
+    <span>核心算法：三阶段分配 + 环形指针</span>
+    <span>代码行数：~330 行</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card blue">
+      <div class="num">8</div>
+      <div class="label">核心函数</div>
+    </div>
+    <div class="stat-card green">
+      <div class="num">2</div>
+      <div class="label">运行模式</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="num">3</div>
+      <div class="label">分配阶段</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="num">1</div>
+      <div class="label">后备补齐机制</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('overview')">📋 总览</button>
+    <button class="tab-btn" onclick="switchTab('algorithm')">🔬 算法原理</button>
+    <button class="tab-btn" onclick="switchTab('linebyline')">📝 逐行解析</button>
+    <button class="tab-btn" onclick="switchTab('ui')">🖥️ 界面说明</button>
+    <button class="tab-btn" onclick="switchTab('variables')">🗂️ 关键变量</button>
+  </div>
+
+  <!-- ══════════════════════ TAB: OVERVIEW ══════════════════════ -->
+  <div id="tab-overview" class="tab-content active">
+
+    <div class="card">
+      <h2><span class="icon">🏗️</span> 整体架构</h2>
+      <div class="arch-diagram">
+        <div class="arch-flow">
+          <div class="arch-node input">📤 账号表<br><small>账号ID / 品类 / 目标数量</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node input">📤 SKU表<br><small>虚拟SKU / 真实SKU / 着陆页 / 素材版本</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node process">⚙️ run_allocation<br><small>核心分配算法</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node process">📦 allocate_main_category<br><small>阶段1~3 分配</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node process">🔄 allocate_fallback<br><small>后备环形补齐</small></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node output">📊 匹配结果表<br><small>含缺口预警</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🎯</span> 两种运行模式对比</h2>
+      <div class="mode-compare">
+        <div class="mode-box m1">
+          <div class="mode-tag">模式一</div>
+          <h3>广度优先，不补齐</h3>
+          <ul>
+            <li>账号内同一 SKU 绝对不重复</li>
+            <li>主品类用尽即停止，不跨品类补齐</li>
+            <li>宁缺毋滥，严格去重</li>
+            <li>适用于品类资源充足场景</li>
+          </ul>
+        </div>
+        <div class="mode-box m2">
+          <div class="mode-tag">模式二</div>
+          <h3>不足补齐（推荐）</h3>
+          <ul>
+            <li>允许同 SKU 不同素材（禁止同组合）</li>
+            <li>主品类耗尽后自动切后备品类补齐</li>
+            <li>后备按环形指针均摊，防止账号扎堆拿同样素材</li>
+            <li>适合品类资源不均衡、需跨品类填充场景</li>
+          </ul>
+        </div>
+      </div>
+      <div class="highlight-box">
+        <strong>核心区别：</strong>模式一 <code>strict_unique_sku=True</code>（SKU 在账号内只出现一次），模式二 <code>strict_unique_sku=False</code>（允许同 SKU 不同素材变体）。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">⚡</span> 三阶段分配流程</h2>
+      <div class="flow-diagram">
+        <div class="flow-step phase1">
+          <div class="step-num">阶段 1</div>
+          <div class="step-title">各SKU第1变体</div>
+          <div class="step-desc">广度优先，每个SKU取首条变体</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step phase2">
+          <div class="step-num">阶段 2</div>
+          <div class="step-title">全局未用变体</div>
+          <div class="step-desc">深度优先，按变体索引逐层向下</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step phase3">
+          <div class="step-num">阶段 3</div>
+          <div class="step-title">跨账号顺延复用</div>
+          <div class="step-desc">环形指针接续，避免后账号重复起点</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step phase4">
+          <div class="step-num">阶段 4</div>
+          <div class="step-title">后备品类补齐</div>
+          <div class="step-desc">模式二专属，环形均摊跨SKU填充</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">📦</span> 核心数据结构</h2>
+      <div class="var-grid">
+        <div class="var-item">
+          <code>sku_group[sku] = [item1, item2, ...]</code>
+          <div class="desc">按 SKU 分组的资源池，保持原始顺序</div>
+        </div>
+        <div class="var-item">
+          <code>ordered_skus = ['SKU1','SKU2'...]</code>
+          <div class="desc">SKU 首次出现的顺序列表（去重）</div>
+        </div>
+        <div class="var-item">
+          <code>globally_consumed_combos: set</code>
+          <div class="desc">全局已消耗的组合集合（跨账号共享）</div>
+        </div>
+        <div class="var-item">
+          <code>acc_used_skus: set</code>
+          <div class="desc">当前账号已用 SKU 集合（防止账号内重复）</div>
+        </div>
+        <div class="var-item">
+          <code>acc_used_combos: set</code>
+          <div class="desc">当前账号已用组合集合（账号内防重）</div>
+        </div>
+        <div class="var-item">
+          <code>phase3_pointer: int</code>
+          <div class="desc">阶段3环形指针，跨账号接续偏移位置</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔑</span> 唯一键设计</h2>
+      <p style="color: var(--muted); margin-bottom: 14px;">组合唯一键 = <code>(SKU, 着陆页版本, 广告素材版本)</code></p>
+      <div class="code-block">
+<span class="ln"> </span><span class="code-def">def</span> <span class="code-func">make_combo_key</span>(item):
+<span class="ln"> </span>    sku  = <span class="code-func">_sku_id</span>(item)                            <span class="code-comment"># 虚拟SKU优先，否则真实SKU</span>
+<span class="ln"> </span>    lp   = str(item.<span class="code-func">get</span>(<span class="code-str">"着陆页版本名称"</span>, <span class="code-str">""</span>)).<span class="code-func">strip</span>()
+<span class="ln"> </span>    mat  = str(item.<span class="code-func">get</span>(<span class="code-str">"广告素材版本名称"</span>, <span class="code-str">""</span>)).<span class="code-func">strip</span>()
+<span class="ln"> </span>    <span class="code-kw">return</span> (sku, lp, mat)                             <span class="code-comment"># 三元组作为唯一标识</span>
+      </div>
+      <div class="highlight-box">
+        <strong>防重机制：</strong>只要 (SKU + 着陆页版本 + 素材版本) 三者之一不同，就是不同的组合。同一 SKU 可以出现多次（不同素材），但同一组合绝对不会在账号内重复。
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════ TAB: ALGORITHM ══════════════════════ -->
+  <div id="tab-algorithm" class="tab-content">
+
+    <div class="card">
+      <h2><span class="icon">🔬</span> 算法逐阶段详解</h2>
+
+      <div class="phase-section phase1">
+        <h3>🌿 阶段 1 — 各SKU第1变体（广度优先）</h3>
+        <p>按 SKU 出现顺序遍历，每个 SKU 只取第 1 个变体，全局未使用的组合才能被选中。</p>
+        <pre>def _sku_blocked(sku):
+    return strict_unique_sku and sku in acc_used_skus  # 模式一下整SKU跳过
+
+for sku in ordered_skus:                              # 按首次出现顺序
+    if len(selected_items) >= target_count: break
+    if sku in acc_used_skus: continue                 # 账号内已用过该SKU
+    item = sku_group[sku][0]                           # 取第1变体
+    combo_k = make_combo_key(item)
+    if combo_k in globally_consumed_combos: continue   # 全局已耗尽则跳过
+    _pick_item(...)</pre>
+        <div class="highlight-box">
+          <strong>效果：</strong>确保每个账号优先拿到不同 SKU 的首条变体，最大化 SKU 覆盖广度。
+        </div>
+      </div>
+
+      <div class="phase-section phase2">
+        <h3>🔁 阶段 2 — 全局未用变体（深度补齐）</h3>
+        <p>阶段1填不满时，按变体索引 d 从 1、2、3… 逐层往下找，直到填满目标数量或所有变体耗尽。</p>
+        <pre>for d in range(max_depth):                         # d = 变体深度索引
+    for sku in ordered_skus:
+        if len(selected_items) >= target_count: break
+        if _sku_blocked(sku): continue
+        if d >= len(items): continue                  # 该SKU没有第d个变体
+        item = items[d]                               # 取第d个变体
+        combo_k = make_combo_key(item)
+        if combo_k in globally_consumed_combos: continue
+        _pick_item(...)</pre>
+        <div class="highlight-box">
+          <strong>效果：</strong>当某个 SKU 有多个变体时（如同一 SKU 的不同着陆页），优先把每个 SKU 的所有变体都用上，而不是一个 SKU 拿到底。
+        </div>
+      </div>
+
+      <div class="phase-section phase3">
+        <h3>🔄 阶段 3 — 跨账号顺延复用（环形指针）</h3>
+        <p>前两阶段全库耗尽后，按环形指针从上次停下的位置继续取，禁止每个账号都从池子开头重拿相同组合。</p>
+        <pre># 展开全部素材成一维数组（保持SKU顺序）
+flat = _flatten_pool_items(sku_group, ordered_skus)
+n = len(flat)
+start = phase3_pointer % n                            # 从上次偏移接续
+
+for step in range(n):
+    idx = (start + step) % n                          # 环形遍历
+    item = flat[idx]
+    if _sku_blocked(sku): continue
+    if combo_k in acc_used_combos: continue           # 账号内防重
+    _pick_item(...)
+    last_pick_next = (idx + 1) % n                   # 记录下次起点
+phase3_pointer = last_pick_next                       # 更新指针供下个账号接续</pre>
+        <div class="highlight-box">
+          <strong>关键设计：</strong><code>phase3_pointer</code> 存在 <code>phase3_pointers[category]</code> 中，每个主品类独立维护。账号3不会重复账号1/2从池头拿的组合。
+        </div>
+      </div>
+
+      <div class="phase-section phase4">
+        <h3>🆘 阶段 4 — 后备品类环形补齐（模式二专属）</h3>
+        <p>后备品类也有自己的环形指针 <code>global_fallback_pointer</code>，三 Pass 策略：</p>
+        <pre># Pass1: 优先全局未用的"独立SKU第1变体"（DEF类优于ABC类素材2）
+_round_robin("first_free")
+
+# Pass2: 再取全局未用的其他变体（含同SKU素材2）
+_round_robin("any_free")
+
+# Pass3: 全局干涸 → 账号内未出现过的组合复用凑满
+_round_robin("reuse")</pre>
+        <div class="highlight-box">
+          <strong>为什么分三 Pass：</strong>后备品类往往来自不同类目，优先保证"独立感"（每个SKU各一个变体），再允许同SKU多素材，最后才复用。模拟人工分配逻辑。
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔐</span> 防重机制的三层防护</h2>
+      <div class="var-grid">
+        <div class="var-item">
+          <code>globally_consumed_combos</code>
+          <div class="desc"><strong>全局层：</strong>跨账号共享，一个组合只要任一账号用过就标记消耗</div>
+        </div>
+        <div class="var-item">
+          <code>acc_used_skus</code>
+          <div class="desc"><strong>SKU去重层（模式一）：</strong>同一账号内同一 SKU 只允许出现一次</div>
+        </div>
+        <div class="var-item">
+          <code>acc_used_combos</code>
+          <div class="desc"><strong>账号内层：</strong>同一账号内同一组合（SKU+着陆页+素材）只出现一次</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🧠</span> 为什么这样设计？设计意图拆解</h2>
+      <div class="mode-compare">
+        <div class="mode-box m1">
+          <div class="mode-tag">问题</div>
+          <h3>账号间组合重复</h3>
+          <ul>
+            <li>如果每个账号都从池头重拿，账号3/4拿到和1/2完全相同的组合</li>
+            <li>广告测试失去意义——不同账号跑的是相同素材</li>
+          </ul>
+        </div>
+        <div class="mode-box m2">
+          <div class="mode-tag">解法</div>
+          <h3>环形指针接续</h3>
+          <ul>
+            <li>phase3_pointer 跨账号接续，后账号从上次停下的位置继续</li>
+            <li>每个主品类有独立指针，后备品类另有独立指针</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mode-compare">
+        <div class="mode-box m1">
+          <div class="mode-tag">问题</div>
+          <h3>账号内SKU重复</h3>
+          <ul>
+            <li>一个账号拿了 SKU-A 的变体1，下次又拿变体2，账号内扎堆</li>
+            <li>覆盖度低，无法测试更多 SKU</li>
+          </ul>
+        </div>
+        <div class="mode-box m2">
+          <div class="mode-tag">解法</div>
+          <h3>阶段1广度优先</h3>
+          <ul>
+            <li>先遍历所有 SKU 的第1变体，确保账号内每个 SKU 最多出现一次</li>
+            <li>模式二放宽：允许同 SKU 不同素材，提高填充率</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════ TAB: LINE BY LINE ══════════════════════ -->
+  <div id="tab-linebyline" class="tab-content">
+
+    <div class="card">
+      <h2><span class="icon">📝</span> 代码逐行解析</h2>
+      <p style="color: var(--muted); margin-bottom: 20px;">按代码顺序，每行的作用与原理说明：</p>
+
+      <table class="code-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>代码片段</th>
+            <th>解释说明</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- IMPORT -->
+          <tr><td class="ln-col">1</td><td class="code-col"><code>import streamlit as st</code></td><td class="exp-col"><span class="tag tag-import">依赖</span> Streamlit 框架，用于构建 Web UI</td></tr>
+          <tr><td class="ln-col">2</td><td class="code-col"><code>import pandas as pd</code></td><td class="exp-col"><span class="tag tag-import">依赖</span> Pandas 用于 Excel 数据读写</td></tr>
+          <tr><td class="ln-col">3</td><td class="code-col"><code>import gc</code></td><td class="exp-col"><span class="tag tag-import">依赖</span> 垃圾回收，手动清理大变量释放内存</td></tr>
+          <tr><td class="ln-col">4</td><td class="code-col"><code>from collections import defaultdict</code></td><td class="exp-col"><span class="tag tag-import">依赖</span> defaultdict 实现 sku_group 自动初始化为空列表</td></tr>
+          <tr><td class="ln-col">5</td><td class="code-col"><code>from utils import ...</code></td><td class="exp-col"><span class="tag tag-import">依赖</span> 从 utils.py 导入写Excel、读Excel、安全转整数的工具函数</td></tr>
+
+          <!-- SEPARATOR -->
+          <tr><td class="ln-col">7</td><td class="code-col"><code># ── 核心算法 ──</code></td><td class="exp-col"><span class="tag tag-core">分隔注释</span> 标记：以下为核心业务逻辑，UI 可独立调用</td></tr>
+
+          <!-- _sku_id -->
+          <tr><td class="ln-col">9</td><td class="code-col"><code>def _sku_id(item):</code></td><td class="exp-col"><span class="tag tag-core">核心函数</span> 定义 SKU 标识提取规则（小写下划线 = 内部私有函数）</td></tr>
+          <tr><td class="ln-col">10</td><td class="code-col"><code>v_code = str(...).strip()</code></td><td class="exp-col">取"虚拟SKU"字段，转字符串去首尾空格（防 NaN 和空格干扰）</td></tr>
+          <tr><td class="ln-col">12</td><td class="code-col"><code>if v_code and v_code.lower() != "nan":</code></td><td class="exp-col">虚拟SKU 非空且不是字符串 "nan" → 优先用它（业务上虚拟SKU更准确）</td></tr>
+          <tr><td class="ln-col">15</td><td class="code-col"><code>return ""</code></td><td class="exp-col">虚拟/真实SKU 都为空 → 返回空字符串（后续 build_depth_matrix 会跳过）</td></tr>
+
+          <!-- make_combo_key -->
+          <tr><td class="ln-col">18</td><td class="code-col"><code>def make_combo_key(item):</code></td><td class="exp-col"><span class="tag tag-core">核心函数</span> 生成素材组合唯一标识：<code>(SKU, 着陆页版本, 素材版本)</code></td></tr>
+          <tr><td class="ln-col">20</td><td class="code-col"><code>lp = str(item.get(...)).strip()</code></td><td class="exp-col">取"着陆页版本名称"，去空格，保证比较时前后一致</td></tr>
+          <tr><td class="ln-col">21</td><td class="code-col"><code>mat = str(...).strip()</code></td><td class="exp-col">取"广告素材版本名称"，去空格</td></tr>
+          <tr><td class="ln-col">22</td><td class="code-col"><code>return (sku, lp, mat)</code></td><td class="exp-col">返回三元组 tuple 作为字典/集合的 key（可哈希，防重比较）</td></tr>
+
+          <!-- build_depth_matrix -->
+          <tr><td class="ln-col">25</td><td class="code-col"><code>def build_depth_matrix(pool):</code></td><td class="exp-col"><span class="tag tag-core">核心函数</span> 将原始资源池按 SKU 分组，返回分组字典 + 首次出现顺序列表</td></tr>
+          <tr><td class="ln-col">26</td><td class="code-col"><code>sku_group = defaultdict(list)</code></td><td class="exp-col">初始化 defaultdict，访问不存在的 key 自动创建空列表 []，无需手动判断</td></tr>
+          <tr><td class="ln-col">27</td><td class="code-col"><code>ordered_skus = []</code></td><td class="exp-col">记录 SKU 首次出现的顺序（去重），用于后续遍历时保持分配公平性</td></tr>
+          <tr><td class="ln-col">29</td><td class="code-col"><code>if sku not in sku_group:</code></td><td class="exp-col">首次遇到该 SKU → 加入 ordered_skus，确保每个 SKU 只记录一次顺序</td></tr>
+          <tr><td class="ln-col">30</td><td class="code-col"><code>ordered_skus.append(sku)</code></td><td class="exp-col">追加到顺序列表，后续遍历用这个顺序而非字典遍历</td></tr>
+          <tr><td class="ln-col">31</td><td class="code-col"><code>sku_group[sku].append(item)</code></td><td class="exp-col">将素材项加入该 SKU 的列表（保持原始顺序，即 Excel 顺序）</td></tr>
+          <tr><td class="ln-col">32</td><td class="code-col"><code>return sku_group, ordered_skus</code></td><td class="exp-col">返回两个对象：分组字典（查某SKU的变体）、顺序列表（遍历顺序）</td></tr>
+
+          <!-- _pick_item -->
+          <tr><td class="ln-col">35</td><td class="code-col"><code>def _pick_item(...):</code></td><td class="exp-col"><span class="tag tag-algo">辅助函数</span> 选中一条素材，同步更新三个状态集合（原子操作）</td></tr>
+          <tr><td class="ln-col">36</td><td class="code-col"><code>selected_items.append(item.copy())</code></td><td class="exp-col">浅拷贝当前素材项，防止后续修改影响已选列表</td></tr>
+          <tr><td class="ln-col">37</td><td class="code-col"><code>acc_used_combos.add(combo_k)</code></td><td class="exp-col">将该组合加入"账号已用集合"，后续同一账号内不会重复拿</td></tr>
+          <tr><td class="ln-col">38</td><td class="code-col"><code>acc_used_skus.add(sku)</code></td><td class="exp-col">将该 SKU 加入"账号已用集合"（模式一下会触发 SKU 阻塞）</td></tr>
+          <tr><td class="ln-col">39</td><td class="code-col"><code>globally_consumed_combos.add(combo_k)</code></td><td class="exp-col">将该组合加入"全局已消耗集合"，跨账号共享，防所有账号重复</td></tr>
+
+          <!-- _flatten_pool_items -->
+          <tr><td class="ln-col">42</td><td class="code-col"><code>def _flatten_pool_items(...):</code></td><td class="exp-col"><span class="tag tag-algo">辅助函数</span> 将分组数据展平为一维列表，供阶段3环形遍历</td></tr>
+          <tr><td class="ln-col">44-46</td><td class="code-col"><code>for sku in ordered_skus: ...</code></td><td class="exp-col">按 SKU 出现顺序依次展开每个 SKU 的所有变体，保持公平性</td></tr>
+
+          <!-- allocate_main_category -->
+          <tr><td class="ln-col">49</td><td class="code-col"><code>def allocate_main_category(...):</code></td><td class="exp-col"><span class="tag tag-core">核心函数</span> 主品类分配入口，按阶段1→2→3分配，返回选中项和更新后的状态</td></tr>
+          <tr><td class="ln-col">51</td><td class="code-col"><code>strict_unique_sku=True</code></td><td class="exp-col">参数说明：True=模式一（账号内SKU绝对不重复），False=模式二</td></tr>
+          <tr><td class="ln-col">52</td><td class="code-col"><code>phase3_pointer=0</code></td><td class="exp-col">阶段3环形指针起始位置（传入外部状态，支持跨账号接续）</td></tr>
+          <tr><td class="ln-col">59</td><td class="code-col"><code>max_depth = max(len(items)...)</code></td><td class="exp-col">计算最深 SKU 的变体数量（决定阶段2的循环上界）</td></tr>
+          <tr><td class="ln-col">61</td><td class="code-col"><code>def _sku_blocked(sku):</code></td><td class="exp-col">内部函数：模式一下 SKU 已出现在账号内则阻塞（False=模式二=不阻塞）</td></tr>
+
+          <!-- Phase 1 -->
+          <tr><td class="ln-col">64</td><td class="code-col"><code># ── 阶段 1 ──</code></td><td class="exp-col"><span class="tag tag-algo">阶段1</span> 各SKU第1变体 + 全局未用 + 账号内SKU互斥（广度优先）</td></tr>
+          <tr><td class="ln-col">65-73</td><td class="code-col"><code>for sku in ordered_skus: ...</code></td><td class="exp-col">遍历每个SKU（按首次出现顺序）：检查未超目标、未被账号占用、组合全局未用 → 选中第1变体</td></tr>
+
+          <!-- Phase 2 -->
+          <tr><td class="ln-col">76</td><td class="code-col"><code># ── 阶段 2 ──</code></td><td class="exp-col"><span class="tag tag-algo">阶段2</span> 全局未用变体（深度补齐）</td></tr>
+          <tr><td class="ln-col">77-88</td><td class="code-col"><code>for d in range(max_depth): ...</code></td><td class="exp-col">外层 d=变体深度（0-based），内层遍历SKU：取第d个变体，全局/账号防重检查</td></tr>
+
+          <!-- Phase 3 -->
+          <tr><td class="ln-col">91</td><td class="code-col"><code># ── 阶段 3 ──</code></td><td class="exp-col"><span class="tag tag-algo">阶段3</span> 跨账号顺延复用（指针接续）</td></tr>
+          <tr><td class="ln-col">93</td><td class="code-col"><code>start = phase3_pointer % n</code></td><td class="exp-col">从上次环形指针位置接续，<code>% n</code> 保证在数组范围内</td></tr>
+          <tr><td class="ln-col">95-106</td><td class="code-col"><code>for step in range(n): ...</code></td><td class="exp-col">环形遍历展开后的一维池子，最多遍历 n 次（至少走过所有素材一次）</td></tr>
+          <tr><td class="ln-col">107</td><td class="code-col"><code>phase3_pointer = last_pick_next</code></td><td class="exp-col">更新指针到"最后一个选中位置+1"，下个账号从这里接续</td></tr>
+
+          <!-- allocate_fallback_round_robin -->
+          <tr><td class="ln-col">113</td><td class="code-col"><code>def allocate_fallback_round_robin(...):</code></td><td class="exp-col"><span class="tag tag-core">核心函数</span> 模式二专属：后备品类环形指针均摊补齐</td></tr>
+          <tr><td class="ln-col">119</td><td class="code-col"><code>fb_sku_group, fb_ordered_skus = ...</code></td><td class="exp-col">同样用 build_depth_matrix 构建后备品类的分组结构</td></tr>
+          <tr><td class="ln-col">122</td><td class="code-col"><code>def _try_pick_from_sku(sku, mode):</code></td><td class="exp-col">内部函数：三种取料模式（first_free/any_free/reuse），由 _round_robin 调用</td></tr>
+          <tr><td class="ln-col">124</td><td class="code-col"><code>if strict_unique_sku and sku in acc_used_skus:</code></td><td class="exp-col">严格模式下该 SKU 已在账号内出现过 → 拒绝（即使不同素材也不拿）</td></tr>
+          <tr><td class="ln-col">137-138</td><td class="code-col"><code># reuse：仅拦组合重复...</code></td><td class="exp-col">reuse 模式下只检查组合是否重复，不检查全局消耗（因为已经全局耗尽了）</td></tr>
+          <tr><td class="ln-col">143</td><td class="code-col"><code>total_slots = sum(len(v) for v in fb_sku_group.values())</code></td><td class="exp-col">后备品类总素材数，作为"连续无进展"的停止上限，防止模式二下的无限循环</td></tr>
+          <tr><td class="ln-col">148</td><td class="code-col"><code>sku = fb_ordered_skus[global_fallback_pointer % num_fb]</code></td><td class="exp-col">环形取 SKU：指针 mod SKU数量，保证永远在有效索引内循环</td></tr>
+          <tr><td class="ln-col">149</td><td class="code-col"><code>found = _try_pick_from_sku(sku, mode)</code></td><td class="exp-col">按当前模式尝试从该 SKU 取料</td></tr>
+          <tr><td class="ln-col">150</td><td class="code-col"><code>global_fallback_pointer = (ptr + 1) % num_fb</code></td><td class="exp-col">无论是否选中，每次都移动指针到下一个 SKU（均摊轮询）</td></tr>
+          <tr><td class="ln-col">153-155</td><td class="code-col"><code># Pass1 / Pass2 / Pass3</code></td><td class="exp-col">三遍轮询：①优先独立SKU第1变体 → ②全局未用其他变体 → ③账号内复用凑满</td></tr>
+
+          <!-- run_allocation -->
+          <tr><td class="ln-col">161</td><td class="code-col"><code>def run_allocation(acc_rows, sku_rows, run_mode, fallback_category):</code></td><td class="exp-col"><span class="tag tag-core">核心函数</span> 顶层入口：遍历所有账号，调用 allocate_main_category + 条件触发后备补齐</td></tr>
+          <tr><td class="ln-col">163-165</td><td class="code-col"><code>category_sku_map = defaultdict(list)</code></td><td class="exp-col">构建"品类 → SKU列表"的映射，同一品类可能有多个 SKU</td></tr>
+          <tr><td class="ln-col">176</td><td class="code-col"><code>is_mode_two = "模式二" in run_mode</code></td><td class="exp-col">从 UI 传入的 run_mode 字符串中判断是否模式二</td></tr>
+          <tr><td class="ln-col">177</td><td class="code-col"><code>strict_unique_sku = not is_mode_two</code></td><td class="exp-col">模式二 → False（允许同SKU不同素材），模式一 → True（SKU互斥）</td></tr>
+          <tr><td class="ln-col">179</td><td class="code-col"><code>for idx, acc_dict in enumerate(acc_rows):</code></td><td class="exp-col">遍历账号表每行（idx=0-based，excel行号=idx+2）</td></tr>
+          <tr><td class="ln-col">183</td><td class="code-col"><code>if not category:</code></td><td class="exp-col">账号未填写品类 → 记录警告日志并跳过该账号（不能分配）</td></tr>
+          <tr><td class="ln-col">185</td><td class="code-col"><code>raw_pool = category_sku_map.get(category, [])</code></td><td class="exp-col">根据品类查对应 SKU 列表（若品类名不匹配则返回空列表）</td></tr>
+          <tr><td class="ln-col">186</td><td class="code-col"><code>if not raw_pool:</code></td><td class="exp-col">品类存在但无对应 SKU → 记录缺口（目标N/实际0），继续下个账号</td></tr>
+          <tr><td class="ln-col">189-195</td><td class="code-col"><code>allocate_main_category(...)</code></td><td class="exp-col">调用主分配函数，传入阶段3指针（品类级别），返回选中项和更新后的指针</td></tr>
+          <tr><td class="ln-col">197</td><td class="code-col"><code>if is_mode_two and len(selected_items) &lt; target...</code></td><td class="exp-col">模式二 + 主品类不足 + 有后备品类 → 触发后备补齐</td></tr>
+          <tr><td class="ln-col">208</td><td class="code-col"><code>phase3_pointers[category] = ...</code></td><td class="exp-col">将更新后的阶段3指针存回字典，每个品类独立维护（不同品类间互不干扰）</td></tr>
+          <tr><td class="ln-col">219-224</td><td class="code-col"><code>if gap == 0: note_text = "完全匹配"</code></td><td class="exp-col">gap=0 → 备注写"完全匹配"，否则写"缺N个"并记录到缺口列表</td></tr>
+          <tr><td class="ln-col">227-232</td><td class="code-col"><code>item["广告账号ID"] = acc_id ...</code></td><td class="exp-col">将账号信息写入选中的每条素材项，最终合并到 final_rows 输出</td></tr>
+
+          <!-- UI -->
+          <tr><td class="ln-col">240</td><td class="code-col"><code>_LOGIC_DOC = """..."""</code></td><td class="exp-col"><span class="tag tag-ui">界面</span> 逻辑说明文档字符串，供 Streamlit expander 组件渲染</td></tr>
+
+          <!-- run(params) -->
+          <tr><td class="ln-col">244</td><td class="code-col"><code>def run(params):</code></td><td class="exp-col"><span class="tag tag-ui">界面</span> Streamlit 页面入口函数，由主程序调用，params 包含输出配置</td></tr>
+          <tr><td class="ln-col">245</td><td class="code-col"><code>st.subheader("📦 模块七...")</code></td><td class="exp-col">渲染页面大标题（Streamlit API）</td></tr>
+          <tr><td class="ln-col">247</td><td class="code-col"><code>with st.expander(...):</code></td><td class="exp-col">可折叠展开组件，点击显示逻辑说明文档，默认折叠（expanded=False）</td></tr>
+          <tr><td class="ln-col">250</td><td class="code-col"><code>c_left, c_right = st.columns([1, 1])</code></td><td class="exp-col">两列布局：左侧放模式选择，右侧放文件上传，gap="large" 加大间距</td></tr>
+          <tr><td class="ln-col">252</td><td class="code-col"><code>st.radio("选择补齐与填充策略", [...])</code></td><td class="exp-col">单选按钮让用户选择运行模式，help 参数提供悬浮提示</td></tr>
+          <tr><td class="ln-col">261</td><td class="code-col"><code>if "模式二" in run_mode:</code></td><td class="exp-col">用户选模式二时显示后备品类输入框，模式一隐藏</td></tr>
+          <tr><td class="ln-col">263</td><td class="code-col"><code>fallback_category = st.text_input(...).strip()</code></td><td class="exp-col">后备品类输入框，placeholder 给出填写示例</td></tr>
+          <tr><td class="ln-col">268</td><td class="code-col"><code>up = st.file_uploader(...)</code></td><td class="exp-col">文件上传组件，只接受 .xlsx，关键参数 key="m7_up" 用于 session_state 追踪</td></tr>
+          <tr><td class="ln-col">270-272</td><td class="code-col"><code>if ... != (up.name if up else None):</code></td><td class="exp-col">检测文件是否变化：上传新文件时清空 session_state 中的旧数据（防止残留）</td></tr>
+          <tr><td class="ln-col">274-280</td><td class="code-col"><code>st.session_state.pop(...)</code></td><td class="exp-col">清空旧结果的 session_state（Excel数据、总行数、缺口摘要、警告日志）</td></tr>
+          <tr><td class="ln-col">284</td><td class="code-col"><code>if up:</code></td><td class="exp-col">有文件上传时显示"执行匹配"按钮区域（条件渲染，文件未上传时不显示）</td></tr>
+          <tr><td class="ln-col">286</td><td class="code-col"><code>file_bytes = up.getvalue()</code></td><td class="exp-col">一次性读取文件全部字节（内存操作，无临时文件）</td></tr>
+          <tr><td class="ln-col">289-292</td><td class="code-col"><code>df_acc_raw = read_uploaded_excel(..., "账号表")</code></td><td class="exp-col">从 Excel 字节流中读取"账号表" sheet，返回 DataFrame</td></tr>
+          <tr><td class="ln-col">294</td><td class="code-col"><code>acc_rows = [r for r in ... if any(str(v).strip() for v in r.values())]</code></td><td class="exp-col">过滤账号表：排除所有字段都为空/NaN 的无效行</td></tr>
+          <tr><td class="ln-col">303</td><td class="code-col"><code>final_rows, warning_logs, gap_summary_list = run_allocation(...)</code></td><td class="exp-col">调用核心分配算法，传入账号行、SKU行、运行模式、后备品类</td></tr>
+          <tr><td class="ln-col">305</td><td class="code-col"><code>if final_rows:</code></td><td class="exp-col">有匹配结果时 → 构 DataFrame → 排序列 → 写 Excel → 存入 session_state</td></tr>
+          <tr><td class="ln-col">308-317</td><td class="code-col"><code>preferred_order = ["广告账号ID", "主页ID", "像素ID"]</code></td><td class="exp-col">结果列排序：账号信息放最前，原SKU列保留顺序，账号专属列（备注）放最后</td></tr>
+          <tr><td class="ln-col">320</td><td class="code-col"><code>xlsx_data = write_excel_final(final_df, "品类匹配结果", params, color_by="广告账号ID")</code></td><td class="exp-col">调用 utils 写 Excel，color_by 参数按账号ID着色（不同账号不同颜色）</td></tr>
+          <tr><td class="ln-col">322-326</td><td class="exp-col"><code>st.session_state["m7_..."] = ...</code></td><td class="exp-col">将结果存入 session_state（Streamlit 的服务端会话缓存，刷新页面不丢失）</td></tr>
+          <tr><td class="ln-col">334</td><td class="code-col"><code>del locals()[var]; gc.collect()</code></td><td class="exp-col">手动删除大 DataFrame 变量后强制 gc 回收，释放内存</td></tr>
+          <tr><td class="ln-col">342</td><td class="code-col"><code>st.download_button(...)</code></td><td class="exp-col">下载按钮：从 session_state 读取 Excel 字节流，触发浏览器下载</td></tr>
+          <tr><td class="ln-col">348-361</td><td class="code-col"><code>with st.expander("📋 运行提示"):</code></td><td class="exp-col">警告日志和缺口明细都放在可折叠 expander 中，保持主界面整洁</td></tr>
+          <tr><td class="ln-col">361</td><td class="code-col"><code>st.success("🎉 所有账号...")</code></td><td class="exp-col">缺口列表为空时显示成功提示（全绿色）</td></tr>
+
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════ TAB: UI ══════════════════════ -->
+  <div id="tab-ui" class="tab-content">
+
+    <div class="card">
+      <h2><span class="icon">🖥️</span> Streamlit 页面布局说明</h2>
+
+      <div class="arch-diagram">
+        <div class="arch-flow" style="flex-direction: column; gap: 8px;">
+          <div class="arch-node process" style="width: 100%; max-width: 500px;">
+            <strong>st.subheader</strong> — 页面大标题"📦 模块七：账号品类匹配与智能SKU组合"
+          </div>
+          <div class="arch-node input" style="width: 100%; max-width: 500px;">
+            <strong>st.expander</strong> — "💡 点击查看：运行逻辑说明"，默认折叠
+          </div>
+          <div class="arch-node input" style="width: 100%; max-width: 500px;">
+            <strong>st.columns([1,1])</strong> — 两列布局
+          </div>
+          <div class="arch-arrow" style="transform: rotate(90deg);">↓</div>
+          <div class="arch-node process" style="width: 100%;">
+            <strong>左侧列：</strong>st.radio（模式选择）+ 条件渲染的 st.text_input（后备品类）
+          </div>
+          <div class="arch-node input" style="width: 100%;">
+            <strong>右侧列：</strong>st.file_uploader（上传 .xlsx）
+          </div>
+          <div class="arch-arrow" style="transform: rotate(90deg);">↓</div>
+          <div class="arch-node input" style="width: 100%; max-width: 500px;">
+            <strong>文件上传后：</strong>显示"🚀 开始匹配"按钮 + 完成后显示"💾 下载结果"按钮
+          </div>
+          <div class="arch-node output" style="width: 100%;">
+            <strong>结果区：</strong>警告日志 expander + 缺口明细 expander + 成功提示
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">📋</span> Excel 模板要求</h2>
+      <div class="var-grid">
+        <div class="var-item">
+          <code>Sheet: 账号表</code>
+          <div class="desc">必填字段：账号ID、品类、主页ID、像素ID、需要组合的SKU数量</div>
+        </div>
+        <div class="var-item">
+          <code>Sheet: SKU表</code>
+          <div class="desc">必填字段：商品分类、虚拟SKU（或真实SKU）、着陆页版本名称、广告素材版本名称</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">📤</span> 输出结果说明</h2>
+      <div class="var-grid">
+        <div class="var-item">
+          <code>广告账号ID</code>
+          <div class="desc">从账号表填入，标识该行素材属于哪个广告账号</div>
+        </div>
+        <div class="var-item">
+          <code>主页ID / 像素ID</code>
+          <div class="desc">从账号表填入，供广告系统使用</div>
+        </div>
+        <div class="var-item">
+          <code>备注</code>
+          <div class="desc">"完全匹配"=100%覆盖；"⚠️ 缺N个"=有缺口需人工处理</div>
+        </div>
+      </div>
+      <div class="highlight-box">
+        <strong>Excel 着色：</strong>按"广告账号ID"列着色，不同账号的行自动填充不同颜色，方便人工核对和分发。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔄</span> Session State 状态管理</h2>
+      <div class="var-grid">
+        <div class="var-item">
+          <code>m7_last_up</code>
+          <div class="desc">记录当前上传文件名，变化时清空旧结果（防止换文件还用旧数据）</div>
+        </div>
+        <div class="var-item">
+          <code>m7_excel_bytes</code>
+          <div class="desc">生成的 Excel 字节流（存储在服务端，用户可多次下载）</div>
+        </div>
+        <div class="var-item">
+          <code>m7_total_rows</code>
+          <div class="desc">结果总行数，用于下载按钮显示文件名</div>
+        </div>
+        <div class="var-item">
+          <code>m7_gap_summary</code>
+          <div class="desc">缺口摘要列表，用于渲染缺口明细</div>
+        </div>
+        <div class="var-item">
+          <code>m7_warning_logs</code>
+          <div class="desc">警告日志列表，用于渲染警告展开区</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════ TAB: VARIABLES ══════════════════════ -->
+  <div id="tab-variables" class="tab-content">
+
+    <div class="card">
+      <h2><span class="icon">🗂️</span> 全部函数签名一览</h2>
+      <div class="func-card"><div class="sig">def _sku_id(item) → str</div><div class="purpose">从一条素材项中提取有效 SKU 标识（虚拟优先，否则真实，空返回 ""）</div></div>
+      <div class="func-card"><div class="sig">def make_combo_key(item) → tuple</div><div class="purpose">生成组合唯一键：(_sku_id, 着陆页版本名称, 广告素材版本名称)</div></div>
+      <div class="func-card"><div class="sig">def build_depth_matrix(pool) → (dict, list)</div><div class="purpose">将资源池按 SKU 分组，返回 (sku_group, ordered_skus)</div></div>
+      <div class="func-card"><div class="sig">def _pick_item(item, selected_items, acc_used_combos, acc_used_skus, globally_consumed_combos, sku)</div><div class="purpose">选中一条素材，原子更新三个防重状态集合</div></div>
+      <div class="func-card"><div class="sig">def _flatten_pool_items(sku_group, ordered_skus) → list</div><div class="purpose">将分组数据展平为一维列表，供阶段3环形遍历</div></div>
+      <div class="func-card"><div class="sig">def allocate_main_category(raw_pool, target_count, globally_consumed_combos, strict_unique_sku, phase3_pointer) → (list, set, set, int)</div><div class="purpose">主品类三阶段分配核心算法</div></div>
+      <div class="func-card"><div class="sig">def allocate_fallback_round_robin(fb_raw_pool, target_count, selected_items, acc_used_combos, acc_used_skus, globally_consumed_combos, global_fallback_pointer, strict_unique_sku) → (list, set, set, int)</div><div class="purpose">模式二专属：后备品类三 Pass 环形补齐</div></div>
+      <div class="func-card"><div class="sig">def run_allocation(acc_rows, sku_rows, run_mode, fallback_category) → (list, list, list)</div><div class="purpose">顶层入口：遍历账号执行分配，返回 (final_rows, warning_logs, gap_summary_list)</div></div>
+      <div class="func-card"><div class="sig">def run(params) → None</div><div class="purpose">Streamlit UI 入口函数，由主程序调用，params 包含输出前缀等配置</div></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔗</span> 函数调用链</h2>
+      <pre class="code-block">
+run(params)                                    ← Streamlit 入口
+  └─ run_allocation(acc_rows, sku_rows, ...)
+       ├─ build_depth_matrix(raw_pool)
+       │    └─ _sku_id(item)
+       ├─ allocate_main_category(...)           ← 阶段1→2→3
+       │    ├─ build_depth_matrix(raw_pool)
+       │    ├─ _pick_item(...)                ← 多次调用
+       │    └─ _flatten_pool_items(...)
+       └─ allocate_fallback_round_robin(...)  ← 模式二专属
+            └─ _try_pick_from_sku(...)         ← 内部三模式
+                 └─ _pick_item(...)
+      </pre>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔢</span> 关键数值约束</h2>
+      <div class="var-grid">
+        <div class="var-item">
+          <code>phase3_pointer</code>
+          <div class="desc">跨账号接续，品类维度独立。账号1用掉3个后指针=3，账号2从位置3继续拿</div>
+        </div>
+        <div class="var-item">
+          <code>global_fallback_pointer</code>
+          <div class="desc">后备品类独立环形指针，与主品类指针互不影响</div>
+        </div>
+        <div class="var-item">
+          <code>max_depth</code>
+          <div class="desc">最深 SKU 的变体数量 = 阶段2外层循环上界</div>
+        </div>
+        <div class="var-item">
+          <code>total_slots</code>
+          <div class="desc">后备品类总素材数 = reuse 模式的无进展停止上限（防止死循环）</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">⚠️</span> 潜在风险点</h2>
+      <div class="var-grid">
+        <div class="var-item" style="border-color: rgba(239,83,80,0.3);">
+          <code>品类名严格匹配</code>
+          <div class="desc">账号表填的品类名必须与SKU表"商品分类"列完全一致（包括空格），否则匹配不到资源池</div>
+        </div>
+        <div class="var-item" style="border-color: rgba(255,183,77,0.3);">
+          <code>NaN 处理</code>
+          <div class="desc">_sku_id 用 .lower() != "nan" 判断，Excel 导出时某些库可能输出 NaN 而非字符串，需注意</div>
+        </div>
+        <div class="var-item" style="border-color: rgba(206,147,216,0.3);">
+          <code>模式二循环风险</code>
+          <div class="desc">total_slots 作为无进展上限，但模式二 reuse 阶段理论上可能真的填不满（资源彻底枯竭），此时函数正常返回缺口</div>
+        </div>
+        <div class="var-item" style="border-color: rgba(105,240,174,0.3);">
+          <code>session_state 清空时机</code>
+          <div class="desc">只有上传新文件才清空旧数据，重复点击按钮不会触发重新计算（需重新上传文件或加重新计算按钮）</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<footer>
+  模块七：账号品类匹配与智能SKU组合 · module_7.py · 由 QClaw 可视化生成
+</footer>
+
+<button id="top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  window.addEventListener('scroll', () => {
+    const btn = document.getElementById('top-btn');
+    btn.style.display = window.scrollY > 300 ? 'flex' : 'none';
+  });
+</script>
+
+</body>
+</html>
