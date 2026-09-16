@@ -29,59 +29,99 @@ def read_uploaded_excel(file_bytes, sheet_name=0):
 # ==========================================
 # 2. 智能素材版本展开引擎
 # ==========================================
+def _is_blank_cell(val):
+    s = str(val).strip() if val is not None else ""
+    return (not s) or s.lower() in ("nan", "none")
+
+
+def _landing_page_version_name(row_dict):
+    """取出可作为版本名的着陆页（排除说明行和商品链接）。"""
+    skip_tokens = ("可不填", "此行为说明", "填写完整", "落地页", "着陆页库")
+    link_indicators = (
+        "http://", "https://", "www.", ".com", ".cn", ".top", ".shop",
+        ".net", ".org", ".site", "/products/", "/funnel/",
+    )
+    for key in ("着陆页版本名称", "着陆页链接"):
+        raw = row_dict.get(key, "")
+        if _is_blank_cell(raw):
+            continue
+        s = str(raw).strip()
+        if any(tok in s for tok in skip_tokens):
+            continue
+        low = s.lower()
+        if any(ind in low for ind in link_indicators):
+            continue
+        return s
+    return ""
+
+
+def _parse_material_expand_base(base_name, landing_page=""):
+    """解析素材版本如何展开。
+
+    返回 (prefix, start_num, padding_len, replace_tail)：
+    - replace_tail True：改写末尾数字，如 优化组版本-1 → 优化组版本-1, -2
+    - replace_tail False：整名当当前缀再追加 -1, -2。
+      着陆页名本身常带数字（优化组版本-OPDY-RX-7），末尾数字不是素材序号。
+    """
+    base_name = str(base_name or "").strip()
+    if _is_blank_cell(base_name):
+        base_name = "素材"
+    landing_page = str(landing_page or "").strip()
+
+    if landing_page:
+        if base_name == landing_page:
+            return base_name, 1, 0, False
+        if base_name.startswith(landing_page):
+            extra = base_name[len(landing_page):]
+            if extra.startswith("-") and extra[1:].isdigit():
+                num_str = extra[1:]
+                return landing_page, int(num_str), len(num_str), True
+
+    if "-" in base_name:
+        prefix, tail = base_name.rsplit("-", 1)
+        if tail.isdigit():
+            return prefix, int(tail), len(tail), True
+    return base_name, 1, 0, False
+
+
 def expand_material_versions(row_dict):
     base_name = str(row_dict.get("广告素材版本名称", "素材")).strip()
-    
+    if _is_blank_cell(base_name):
+        base_name = "素材"
+
     selection = str(row_dict.get("素材选取 (X-Y)", "")).strip()
     if not selection or selection.lower() == "nan":
         selection = str(row_dict.get("素材选取", "")).strip()
 
-    if '-' in base_name and base_name.rsplit('-', 1)[1].isdigit():
-        clean_prefix, base_start_num_str = base_name.rsplit('-', 1)
-        padding_len = len(base_start_num_str)
-        base_start_num = int(base_start_num_str)
-        has_suffix = True
-    else:
-        clean_prefix = base_name
-        padding_len = 0
-        base_start_num = 1
-        has_suffix = False
+    landing_page = _landing_page_version_name(row_dict)
+    clean_prefix, base_start_num, padding_len, replace_tail = _parse_material_expand_base(
+        base_name, landing_page
+    )
 
-    if '-' in selection and all(part.strip().isdigit() for part in selection.split('-', 1)):
-        parts = selection.split('-', 1)
+    def format_one(num):
+        if replace_tail:
+            formatted_num = str(num).zfill(padding_len) if padding_len else str(num)
+            return f"{clean_prefix}-{formatted_num}"
+        return f"{clean_prefix}-{num}"
+
+    if "-" in selection and all(part.strip().isdigit() for part in selection.split("-", 1)):
+        parts = selection.split("-", 1)
         start_num, end_num = int(parts[0]), int(parts[1])
         if start_num > end_num:
             start_num, end_num = end_num, start_num
-
-        versions = []
-        for i in range(start_num, end_num + 1):
-            if has_suffix:
-                formatted_num = str(i).zfill(padding_len)
-                versions.append(f"{clean_prefix}-{formatted_num}")
-            else:
-                versions.append(f"{clean_prefix}-{i}")
-        return versions
+        return [format_one(i) for i in range(start_num, end_num + 1)]
 
     if selection.isdigit():
-        target_num = int(selection)
-        if has_suffix:
-            return [f"{clean_prefix}-{str(target_num).zfill(padding_len)}"]
-        else:
-            return [f"{clean_prefix}-{target_num}"]
+        return [format_one(int(selection))]
 
     provided_count = safe_int(row_dict.get("广告素材数量", 1), default=1)
     if provided_count <= 1:
         return [base_name]
 
-    versions = []
-    if has_suffix:
-        for i in range(provided_count):
-            current_num = base_start_num + i
-            formatted_num = str(current_num).zfill(padding_len)
-            versions.append(f"{clean_prefix}-{formatted_num}")
-        return versions
-    else:
-        return [f"{base_name}-{i}" for i in range(1, provided_count + 1)]
+    if replace_tail:
+        return [format_one(base_start_num + i) for i in range(provided_count)]
+    return [format_one(i) for i in range(1, provided_count + 1)]
+
 
 # ==========================================
 # 3. 辅助循环工具函数
