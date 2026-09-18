@@ -1,16 +1,86 @@
 import streamlit as st
 import pandas as pd
 import gc
-from utils import write_excel_final, read_uploaded_excel, safe_int
+from utils import write_excel_final, read_uploaded_excel, safe_int, expand_material_versions
+
+DEFAULT_VERSION = "默认版本"
+
+
+def build_material_pool(row_dict, provided_count):
+    """按提供素材版本数量展开；数量空/0 表示没有真实素材，由调用方补默认版本。"""
+    if provided_count <= 0:
+        return []
+    expand_row = dict(row_dict)
+    expand_row["广告素材数量"] = provided_count
+    return expand_material_versions(expand_row)
+
+
+def _pick_material(materials, idx):
+    if 0 <= idx < len(materials):
+        return materials[idx]
+    return DEFAULT_VERSION
+
+
+def iter_campaign_slots(m_groups, n_ads, series_count):
+    """生成导出行顺序：(系列0起, 广告组0起, 广告0起)。
+
+    例：2 个系列、1:2:3 → 共 12 行。前 6 行系列1，后 6 行系列2。
+    每个系列内按广告组交叉：组1、组2、组1、组2… 直到每组都有 N 条广告。
+    """
+    for series in range(int(series_count)):
+        for ad in range(int(n_ads)):
+            for group in range(int(m_groups)):
+                yield series, group, ad
+
+
+def material_index_for_slot(logic_mode, series, group, ad, m_groups, n_ads):
+    """系列间接着消耗素材，不从头数。"""
+    if logic_mode == "组间测素材":
+        return series * m_groups + group
+    return series * (m_groups * n_ads) + ad * m_groups + group
+
+
+def assigned_version(logic_mode, materials, series, group, ad, m_groups, n_ads):
+    idx = material_index_for_slot(logic_mode, series, group, ad, m_groups, n_ads)
+    return _pick_material(materials, idx)
+
+
+def build_series_matrices(logic_mode, materials, m_groups, n_ads, series_count):
+    """按系列依次消耗素材，系列之间不重复；不够的坑位用默认版本。
+
+    组间测素材：每个系列消耗 M 条（一组一条，组内 N 个广告共用）。
+    组内测素材：每个系列消耗 M×N 条（每个广告位一条）。
+    返回 list[matrix]，matrix[组][广告] 为版本名。
+    """
+    matrices = [
+        [[DEFAULT_VERSION for _ in range(n_ads)] for _ in range(m_groups)]
+        for _ in range(int(series_count))
+    ]
+    for series, group, ad in iter_campaign_slots(m_groups, n_ads, series_count):
+        matrices[series][group][ad] = assigned_version(
+            logic_mode, materials, series, group, ad, m_groups, n_ads
+        )
+    return matrices
+
+
+def flatten_series_rows(matrices, m_groups, n_ads):
+    """与导出一致：先 Ad1 的所有组，再 Ad2 的所有组。"""
+    names = []
+    series_count = len(matrices)
+    for series, group, ad in iter_campaign_slots(m_groups, n_ads, series_count):
+        names.append(matrices[series][group][ad])
+    return names
+
 
 def run(params):
     st.subheader("🎯 模块四：补齐默认版本 (全结构适配版)")
     
     with st.expander("💡 点击查看：模块四运行逻辑说明"):
         st.markdown("""
-        - **行排列顺序**：严格遵循“横向交叉”逻辑。系统会先生成所有组的第一个广告（Ad 1），再生成所有组的第二个广告（Ad 2），以此类推。
-        - **全结构适配**：无论 $M$ 或 $N$ 是否为 1，系统均能自动对齐坑位，确保导出的表格顺序与分析习惯一致。
-        - **自动补齐**：当现有素材不足以填满 $1:M:N$ 结构时，系统将自动填充“默认版本”。
+        - **行排列顺序**：先写完一个系列，再写下一系列。系列内部按广告组交叉：组1、组2、组1、组2… 直到每组都凑满 N 条广告。
+        - **示例（2 个系列、结构 1:2:3）**：共 12 行。前 6 行系列1（组1、组2、组1、组2、组1、组2），后 6 行系列2，同样交叉。
+        - **系列间不同素材**：多个系列接着往下用素材，不会每个系列都从第 1 条重数。
+        - **自动补齐**：当现有素材不足以填满全部系列的 $1:M:N$ 结构时，系统将自动填充“默认版本”。
         """)
     
     col_a, col_b, col_c = st.columns(3)
@@ -45,36 +115,19 @@ def run(params):
             provided_count = safe_int(row_dict.get("提供素材版本数量"))
             series_count = safe_int(row_dict.get("导品系列数"), default=1)
             template_padding = safe_int(row_dict.get("补充默认版本数"))
-            
-            base_name = str(row_dict.get("广告素材版本名称", "素材")).strip()
-            clean_name = base_name.rsplit('-', 1)[0] if '-' in base_name and base_name.rsplit('-', 1)[1].isdigit() else base_name
-            materials = [f"{clean_name}-{i}" for i in range(1, provided_count + 1)]
-            
+            materials = build_material_pool(row_dict, provided_count)
+            m_groups = int(M_groups)
+            n_ads = int(N_ads)
+
             final_series_rows = []
-
-            for s in range(series_count):
-                matrix = [["默认版本" for _ in range(N_ads)] for _ in range(M_groups)]
-                
-                # 🌟 使用计算映射替代 mat_idx 状态变量
-                if logic_mode == "组间测素材":
-                    for m in range(M_groups):
-                        v = materials[m] if m < len(materials) else "默认版本"
-                        for n in range(N_ads):
-                            matrix[m][n] = v
-                else:
-                    for n in range(N_ads):
-                        for m in range(M_groups):
-                            mat_i = n * M_groups + m
-                            v = materials[mat_i] if mat_i < len(materials) else "默认版本"
-                            matrix[m][n] = v
-
-                for n in range(N_ads):
-                    for m in range(M_groups):
-                        new_row = row_dict.copy() 
-                        v_name = matrix[m][n]
-                        new_row["广告素材版本名称"] = v_name
-                        new_row["备注"] = "系统自动补齐" if v_name == "默认版本" else ""
-                        final_series_rows.append(new_row)
+            for series, group, ad in iter_campaign_slots(m_groups, n_ads, series_count):
+                new_row = row_dict.copy()
+                v_name = assigned_version(
+                    logic_mode, materials, series, group, ad, m_groups, n_ads
+                )
+                new_row["广告素材版本名称"] = v_name
+                new_row["备注"] = "系统自动补齐" if v_name == DEFAULT_VERSION else ""
+                final_series_rows.append(new_row)
 
             actual_padding = sum(1 for r in final_series_rows if r["广告素材版本名称"] == "默认版本")
             if template_padding != 0 and template_padding != actual_padding:

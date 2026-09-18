@@ -41,27 +41,60 @@ st.markdown("""
         div[data-testid="stExpander"] {
             margin-bottom: 0.8rem !important;
         }
-        /* 上传区默认 4.25rem，数字框/按钮是 2.5rem，压成同一行高 */
-        [data-testid="stFileUploaderDropzone"] {
+        /* 主区域：上传条、数字框、操作按钮同一行高（已隐藏上传区容量小字） */
+        .block-container [data-testid="stFileUploaderDropzone"],
+        .block-container [data-testid="stNumberInputContainer"],
+        .block-container .stButton > button,
+        .block-container [data-testid="stDownloadButton"] button {
             min-height: 2.5rem !important;
             height: 2.5rem !important;
             max-height: 2.5rem !important;
-            padding: 0 0.5rem !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-            overflow: hidden !important;
             box-sizing: border-box !important;
         }
-        [data-testid="stFileUploaderDropzone"] button {
+        .block-container [data-testid="stFileUploaderDropzone"] {
+            display: flex !important;
+            flex-direction: row !important;
+            padding: 0 0.65rem !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 0 !important;
+            overflow: hidden !important;
+        }
+        .block-container [data-testid="stFileUploaderDropzone"] > * {
+            align-self: center !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+        .block-container [data-testid="stFileUploaderDropzone"] button {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             min-height: 1.85rem !important;
             height: 1.85rem !important;
+            max-height: 1.85rem !important;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
+            line-height: 1 !important;
         }
-        [data-testid="stFileUploaderDropzoneInstructions"] {
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+        .block-container [data-testid="stFileUploaderDropzone"] button p,
+        .block-container [data-testid="stFileUploaderDropzone"] button span,
+        .block-container [data-testid="stFileUploaderDropzone"] button div {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin: 0 !important;
+            line-height: 1 !important;
+        }
+        .block-container [data-testid="stFileUploaderDropzoneInstructions"] {
+            display: none !important;
+        }
+        .block-container [data-testid="stNumberInputContainer"] > div,
+        .block-container [data-testid="stNumberInputContainer"] [data-baseweb="input"],
+        .block-container [data-testid="stNumberInputContainer"] [data-baseweb="input"] > div,
+        .block-container [data-testid="stNumberInputField"] {
+            min-height: 2.5rem !important;
+            height: 2.5rem !important;
+            box-sizing: border-box !important;
         }
     </style>
 """, unsafe_allow_html=True)

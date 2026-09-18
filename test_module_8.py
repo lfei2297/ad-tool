@@ -225,6 +225,13 @@ def test_mode45_per_sku_cap():
     assert len(next(iter(tables4.values()))) == 20
 
 
+def test_mode5_without_cap_keeps_all():
+    acc = [{"广告账号ID": "A1", "虚拟SKU": "S1", "国家": "美国"}]
+    sku = _sku_rows("S1", 30)
+    tables, _, _ = run_module_8_matching(_m8_bytes(acc, sku), n_group=50, mode="模式五")
+    assert len(next(iter(tables.values()))) == 30
+
+
 def test_mode4_truncate_even_split():
     acc = [{"广告账号ID": "A1", "虚拟SKU": s, "国家": "美国", "着陆页链接": "https://x.com/p"} for s in ("S1", "S2", "S3")]
     sku = _sku_rows("S1", 30) + _sku_rows("S2", 30) + _sku_rows("S3", 30)
@@ -443,6 +450,8 @@ if __name__ == "__main__":
     print("ok export keep-both-fill-one")
     test_mode45_per_sku_cap()
     print("ok per-sku cap")
+    test_mode5_without_cap_keeps_all()
+    print("ok mode5 no cap")
     test_mode4_truncate_even_split()
     print("ok mode4 even")
     test_mode4_sku_over_n_takes_first_n_one_each()

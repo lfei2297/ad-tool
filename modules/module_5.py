@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gc
-from utils import write_excel_final, read_uploaded_excel, cycle_repeat, safe_int
+from utils import write_excel_final, read_uploaded_excel, cycle_repeat, expand_material_versions
 
 def run(params):
     st.subheader("🚀 模块五：通用素材循环填充与分流")
@@ -49,17 +49,12 @@ def run(params):
         sku_split_lens = [base_step + (1 if i < rem else 0) for i in range(int(sub_table_count))]
 
         for row_dict in valid_rows:
-            provided_count = safe_int(row_dict.get("广告素材数量", 0))
-            base_name = str(row_dict.get("广告素材版本名称", "素材")).strip()
-            
-            clean_name = base_name.rsplit('-', 1)[0] if '-' in base_name and base_name.rsplit('-', 1)[1].isdigit() else base_name
-            
-            if provided_count <= 1:
-                material_pool = [f"{clean_name}-1"]
-            else:
-                material_pool = [f"{clean_name}-{i}" for i in range(1, provided_count + 1)]
-            
-            special_note = f"素材数超标，仅保留前{target_total_rows}个版本" if provided_count > target_total_rows else ""
+            material_pool = expand_material_versions(row_dict)
+            special_note = (
+                f"素材数超标，仅保留前{target_total_rows}个版本"
+                if len(material_pool) > target_total_rows
+                else ""
+            )
             this_sku_materials = cycle_repeat(material_pool, int(target_total_rows))
             
             if "模式B" in run_mode:

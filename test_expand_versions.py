@@ -6,6 +6,18 @@ def _expand(**kwargs):
     return expand_material_versions(kwargs)
 
 
+def test_empty_landing_page_still_increments_material_counter():
+    assert _expand(
+        广告素材版本名称="优化组版本-OPDY-S-2560519-1-1",
+        广告素材数量=6,
+    ) == [f"优化组版本-OPDY-S-2560519-1-{i}" for i in range(1, 7)]
+    assert _expand(广告素材版本名称="优化组版本-OPDY-RX-7-1", 广告素材数量=3) == [
+        "优化组版本-OPDY-RX-7-1",
+        "优化组版本-OPDY-RX-7-2",
+        "优化组版本-OPDY-RX-7-3",
+    ]
+
+
 def test_classic_simple_suffix_increments():
     assert _expand(广告素材版本名称="A-1", 广告素材数量=2) == ["A-1", "A-2"]
     assert _expand(广告素材版本名称="优化组版本-1", 广告素材数量=3) == [
@@ -28,10 +40,47 @@ def test_name_without_numeric_tail_appends():
     ]
 
 
-def test_count_one_keeps_original():
-    assert _expand(广告素材版本名称="优化组版本-OPDY-RX-7", 广告素材数量=1) == [
-        "优化组版本-OPDY-RX-7"
+def test_count_one_keeps_original_when_name_already_has_suffix():
+    assert _expand(广告素材版本名称="优化组版本-1", 广告素材数量=1) == ["优化组版本-1"]
+    assert _expand(
+        广告素材版本名称="优化组版本-OPDY-S-2560519-1-1",
+        广告素材数量=1,
+    ) == ["优化组版本-OPDY-S-2560519-1-1"]
+
+
+def test_empty_landing_page_does_not_eat_product_version():
+    assert _expand(广告素材版本名称="优化组版本-OPDY-RX-7", 广告素材数量=10) == [
+        f"优化组版本-OPDY-RX-7-{i}" for i in range(1, 11)
     ]
+    assert _expand(广告素材版本名称="优化组版本-OPDY-RX-7", 广告素材数量=1) == [
+        "优化组版本-OPDY-RX-7-1"
+    ]
+
+
+def test_blank_count_keeps_original_even_when_same_as_landing_page():
+    assert _expand(
+        着陆页版本名称="优化组版本-GPTJ",
+        广告素材版本名称="优化组版本-GPTJ",
+    ) == ["优化组版本-GPTJ"]
+    assert _expand(
+        着陆页版本名称="优化组版本-GPTJ",
+        广告素材版本名称="优化组版本-GPTJ",
+        广告素材数量="",
+    ) == ["优化组版本-GPTJ"]
+    assert _expand(
+        着陆页版本名称="优化组版本-OPDY-RX-7",
+        广告素材版本名称="优化组版本-OPDY-RX-7",
+        广告素材数量=None,
+    ) == ["优化组版本-OPDY-RX-7"]
+
+
+def test_filled_count_one_appends_when_name_has_no_material_suffix():
+    assert _expand(
+        着陆页版本名称="优化组版本-GPTJ",
+        广告素材版本名称="优化组版本-GPTJ",
+        广告素材数量=1,
+    ) == ["优化组版本-GPTJ-1"]
+    assert _expand(广告素材版本名称="默认版本", 广告素材数量=1) == ["默认版本-1"]
 
 
 def test_landing_page_name_equal_to_material_appends_counter():
@@ -104,6 +153,31 @@ def test_selection_range_on_landing_page_name():
         "优化组版本-OPDY-RX-7-1",
         "优化组版本-OPDY-RX-7-2",
         "优化组版本-OPDY-RX-7-3",
+    ]
+
+
+def test_module4_same_name_appends_like_other_modules():
+    from modules.module_4 import build_material_pool
+
+    row = {
+        "着陆页版本名称": "优化组版本-OPDY-RX-7",
+        "广告素材版本名称": "优化组版本-OPDY-RX-7",
+    }
+    assert build_material_pool(row, 10) == [
+        f"优化组版本-OPDY-RX-7-{i}" for i in range(1, 11)
+    ]
+    assert build_material_pool(row, 0) == []
+
+
+def test_module4_different_name_still_increments_tail():
+    from modules.module_4 import build_material_pool
+
+    row = {
+        "着陆页版本名称": "优化组版本-OPDY-2",
+        "广告素材版本名称": "优化组版本-OPDY-S-2560519-1-1",
+    }
+    assert build_material_pool(row, 6) == [
+        f"优化组版本-OPDY-S-2560519-1-{i}" for i in range(1, 7)
     ]
 
 

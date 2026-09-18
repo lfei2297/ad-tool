@@ -55,6 +55,17 @@ def _landing_page_version_name(row_dict):
     return ""
 
 
+def _numeric_tail_is_product_code(base_name):
+    """无着陆页时判断末尾数字是产品/着陆页版本，而不是素材序号。
+
+    优化组版本-1、…-1-1 仍改最后一位；优化组版本-OPDY-RX-7 这种数字跟在产品码后面则整名追加。
+    """
+    parts = str(base_name).split("-")
+    if len(parts) <= 2:
+        return False
+    return parts[-1].isdigit() and not parts[-2].isdigit()
+
+
 def _parse_material_expand_base(base_name, landing_page=""):
     """解析素材版本如何展开。
 
@@ -80,6 +91,8 @@ def _parse_material_expand_base(base_name, landing_page=""):
     if "-" in base_name:
         prefix, tail = base_name.rsplit("-", 1)
         if tail.isdigit():
+            if not landing_page and _numeric_tail_is_product_code(base_name):
+                return base_name, 1, 0, False
             return prefix, int(tail), len(tail), True
     return base_name, 1, 0, False
 
@@ -114,10 +127,16 @@ def expand_material_versions(row_dict):
     if selection.isdigit():
         return [format_one(int(selection))]
 
-    provided_count = safe_int(row_dict.get("广告素材数量", 1), default=1)
-    if provided_count <= 1:
+    raw_count = row_dict.get("广告素材数量", "")
+    # 广告素材数量未填：不改写版本名（模块五铺行也沿用原名）
+    if _is_blank_cell(raw_count):
         return [base_name]
 
+    provided_count = safe_int(raw_count, default=0)
+    if provided_count <= 0:
+        return [base_name]
+
+    # 填了数量：走 -1 展开（数量=1 且名字本身无素材序号时会补 -1）
     if replace_tail:
         return [format_one(base_start_num + i) for i in range(provided_count)]
     return [format_one(i) for i in range(1, provided_count + 1)]
