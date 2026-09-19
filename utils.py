@@ -55,24 +55,53 @@ def _landing_page_version_name(row_dict):
     return ""
 
 
-def _numeric_tail_is_product_code(base_name):
-    """无着陆页时判断末尾数字是产品/着陆页版本，而不是素材序号。
+# def _numeric_tail_is_product_code(base_name):
+#     """无着陆页时判断末尾数字是产品/着陆页版本，而不是素材序号。
 
-    优化组版本-1、…-1-1 仍改最后一位；优化组版本-OPDY-RX-7 这种数字跟在产品码后面则整名追加。
-    """
-    parts = str(base_name).split("-")
-    if len(parts) <= 2:
-        return False
-    return parts[-1].isdigit() and not parts[-2].isdigit()
+#     优化组版本-1、…-1-1 仍改最后一位；优化组版本-OPDY-RX-7 这种数字跟在产品码后面则整名追加。
+#     """
+#     parts = str(base_name).split("-")
+#     if len(parts) <= 2:
+#         return False
+#     return parts[-1].isdigit() and not parts[-2].isdigit()
 
+
+# def _parse_material_expand_base(base_name, landing_page=""):
+#     """解析素材版本如何展开。
+
+#     返回 (prefix, start_num, padding_len, replace_tail)：
+#     - replace_tail True：改写末尾数字，如 优化组版本-1 → 优化组版本-1, -2
+#     - replace_tail False：整名当当前缀再追加 -1, -2。
+#       着陆页名本身常带数字（优化组版本-OPDY-RX-7），末尾数字不是素材序号。
+#     """
+#     base_name = str(base_name or "").strip()
+#     if _is_blank_cell(base_name):
+#         base_name = "素材"
+#     landing_page = str(landing_page or "").strip()
+
+#     if landing_page:
+#         if base_name == landing_page:
+#             return base_name, 1, 0, False
+#         if base_name.startswith(landing_page):
+#             extra = base_name[len(landing_page):]
+#             if extra.startswith("-") and extra[1:].isdigit():
+#                 num_str = extra[1:]
+#                 return landing_page, int(num_str), len(num_str), True
+
+#     if "-" in base_name:
+#         prefix, tail = base_name.rsplit("-", 1)
+#         if tail.isdigit():
+#             if not landing_page and _numeric_tail_is_product_code(base_name):
+#                 return base_name, 1, 0, False
+#             return prefix, int(tail), len(tail), True
+#     return base_name, 1, 0, False
 
 def _parse_material_expand_base(base_name, landing_page=""):
     """解析素材版本如何展开。
 
     返回 (prefix, start_num, padding_len, replace_tail)：
-    - replace_tail True：改写末尾数字，如 优化组版本-1 → 优化组版本-1, -2
-    - replace_tail False：整名当当前缀再追加 -1, -2。
-      着陆页名本身常带数字（优化组版本-OPDY-RX-7），末尾数字不是素材序号。
+    - replace_tail True：改写末尾数字，如 优化组版本-LDSC-RE-1 → 优化组版本-LDSC-RE-1, -2
+    - replace_tail False：整名当当前缀追加 -1, -2
     """
     base_name = str(base_name or "").strip()
     if _is_blank_cell(base_name):
@@ -88,12 +117,12 @@ def _parse_material_expand_base(base_name, landing_page=""):
                 num_str = extra[1:]
                 return landing_page, int(num_str), len(num_str), True
 
+    # 只要末尾是 -数字，统一累加替换（如 优化组版本-LDSC-RE-1 -> -1, -2...）
     if "-" in base_name:
         prefix, tail = base_name.rsplit("-", 1)
         if tail.isdigit():
-            if not landing_page and _numeric_tail_is_product_code(base_name):
-                return base_name, 1, 0, False
             return prefix, int(tail), len(tail), True
+
     return base_name, 1, 0, False
 
 
