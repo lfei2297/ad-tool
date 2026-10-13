@@ -113,13 +113,36 @@ def test_opdy_rx_2_same_as_workbook1_last_row():
     assert "优化组版本-OPDY-RX-3" not in got
 
 
-def test_landing_page_ending_with_one_still_appends():
+def test_suffix_one_increments_on_the_existing_number():
+    assert _expand(广告素材版本名称="opdy-1", 广告素材数量=2) == ["opdy-1", "opdy-2"]
+    assert _expand(广告素材版本名称="opdy-1-1", 广告素材数量=2) == ["opdy-1-1", "opdy-1-2"]
     got = _expand(
         着陆页版本名称="优化组版本-OPDY-RX-1",
         广告素材版本名称="优化组版本-OPDY-RX-1",
-        广告素材数量=2,
+        广告素材数量=10,
     )
-    assert got == ["优化组版本-OPDY-RX-1-1", "优化组版本-OPDY-RX-1-2"]
+    assert got == [f"优化组版本-OPDY-RX-{i}" for i in range(1, 11)]
+    assert _expand(
+        着陆页版本名称="优化组版本-1",
+        广告素材版本名称="优化组版本-1",
+        广告素材数量=3,
+    ) == ["优化组版本-1", "优化组版本-2", "优化组版本-3"]
+
+
+def test_suffix_not_one_appends_only_when_count_is_filled():
+    assert _expand(广告素材版本名称="优化组版本-N") == ["优化组版本-N"]
+    assert _expand(广告素材版本名称="优化组版本-N", 广告素材数量="") == ["优化组版本-N"]
+    assert _expand(广告素材版本名称="opdy-1") == ["opdy-1"]
+    assert _expand(广告素材版本名称="opdy-7", 广告素材数量=2) == ["opdy-7-1", "opdy-7-2"]
+    assert _expand(广告素材版本名称="优化组版本-2", 广告素材数量=3) == [
+        "优化组版本-2-1",
+        "优化组版本-2-2",
+        "优化组版本-2-3",
+    ]
+    assert _expand(广告素材版本名称="优化组版本-10", 广告素材数量=2) == [
+        "优化组版本-10-1",
+        "优化组版本-10-2",
+    ]
 
 
 def test_non_digit_tail_unchanged():

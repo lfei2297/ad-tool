@@ -34,95 +34,21 @@ def _is_blank_cell(val):
     return (not s) or s.lower() in ("nan", "none")
 
 
-def _landing_page_version_name(row_dict):
-    """取出可作为版本名的着陆页（排除说明行和商品链接）。"""
-    skip_tokens = ("可不填", "此行为说明", "填写完整", "落地页", "着陆页库")
-    link_indicators = (
-        "http://", "https://", "www.", ".com", ".cn", ".top", ".shop",
-        ".net", ".org", ".site", "/products/", "/funnel/",
-    )
-    for key in ("着陆页版本名称", "着陆页链接"):
-        raw = row_dict.get(key, "")
-        if _is_blank_cell(raw):
-            continue
-        s = str(raw).strip()
-        if any(tok in s for tok in skip_tokens):
-            continue
-        low = s.lower()
-        if any(ind in low for ind in link_indicators):
-            continue
-        return s
-    return ""
-
-
-# def _numeric_tail_is_product_code(base_name):
-#     """无着陆页时判断末尾数字是产品/着陆页版本，而不是素材序号。
-
-#     优化组版本-1、…-1-1 仍改最后一位；优化组版本-OPDY-RX-7 这种数字跟在产品码后面则整名追加。
-#     """
-#     parts = str(base_name).split("-")
-#     if len(parts) <= 2:
-#         return False
-#     return parts[-1].isdigit() and not parts[-2].isdigit()
-
-
-# def _parse_material_expand_base(base_name, landing_page=""):
-#     """解析素材版本如何展开。
-
-#     返回 (prefix, start_num, padding_len, replace_tail)：
-#     - replace_tail True：改写末尾数字，如 优化组版本-1 → 优化组版本-1, -2
-#     - replace_tail False：整名当当前缀再追加 -1, -2。
-#       着陆页名本身常带数字（优化组版本-OPDY-RX-7），末尾数字不是素材序号。
-#     """
-#     base_name = str(base_name or "").strip()
-#     if _is_blank_cell(base_name):
-#         base_name = "素材"
-#     landing_page = str(landing_page or "").strip()
-
-#     if landing_page:
-#         if base_name == landing_page:
-#             return base_name, 1, 0, False
-#         if base_name.startswith(landing_page):
-#             extra = base_name[len(landing_page):]
-#             if extra.startswith("-") and extra[1:].isdigit():
-#                 num_str = extra[1:]
-#                 return landing_page, int(num_str), len(num_str), True
-
-#     if "-" in base_name:
-#         prefix, tail = base_name.rsplit("-", 1)
-#         if tail.isdigit():
-#             if not landing_page and _numeric_tail_is_product_code(base_name):
-#                 return base_name, 1, 0, False
-#             return prefix, int(tail), len(tail), True
-#     return base_name, 1, 0, False
-
-def _parse_material_expand_base(base_name, landing_page=""):
-    """解析素材版本如何展开。
+def _parse_material_expand_base(base_name):
+    """解析素材版本如何展开。着陆页名称不参与判断。
 
     返回 (prefix, start_num, padding_len, replace_tail)：
-    - replace_tail True：改写末尾数字，如 优化组版本-LDSC-RE-1 → 优化组版本-LDSC-RE-1, -2
-    - replace_tail False：整名当当前缀追加 -1, -2
+    - 尾缀恰好是 -1：改写这一位。opdy-1 → opdy-1, opdy-2；opdy-1-1 → opdy-1-1, opdy-1-2
+    - 其他名字：整名追加。opdy-7 → opdy-7-1, opdy-7-2；优化组版本-2 同样追加
     """
     base_name = str(base_name or "").strip()
     if _is_blank_cell(base_name):
         base_name = "素材"
-    landing_page = str(landing_page or "").strip()
 
-    if landing_page:
-        if base_name == landing_page:
-            return base_name, 1, 0, False
-        if base_name.startswith(landing_page):
-            extra = base_name[len(landing_page):]
-            if extra.startswith("-") and extra[1:].isdigit():
-                num_str = extra[1:]
-                return landing_page, int(num_str), len(num_str), True
-
-    # 只要末尾是 -数字，统一累加替换（如 优化组版本-LDSC-RE-1 -> -1, -2...）
     if "-" in base_name:
         prefix, tail = base_name.rsplit("-", 1)
-        if tail.isdigit():
-            return prefix, int(tail), len(tail), True
-
+        if tail == "1":
+            return prefix, 1, 1, True
     return base_name, 1, 0, False
 
 
@@ -135,10 +61,7 @@ def expand_material_versions(row_dict):
     if not selection or selection.lower() == "nan":
         selection = str(row_dict.get("素材选取", "")).strip()
 
-    landing_page = _landing_page_version_name(row_dict)
-    clean_prefix, base_start_num, padding_len, replace_tail = _parse_material_expand_base(
-        base_name, landing_page
-    )
+    clean_prefix, base_start_num, padding_len, replace_tail = _parse_material_expand_base(base_name)
 
     def format_one(num):
         if replace_tail:
@@ -165,7 +88,7 @@ def expand_material_versions(row_dict):
     if provided_count <= 0:
         return [base_name]
 
-    # 填了数量：走 -1 展开（数量=1 且名字本身无素材序号时会补 -1）
+    # 填了数量：尾缀 -1 在原数字上累加，其余名字整名追加 -1
     if replace_tail:
         return [format_one(base_start_num + i) for i in range(provided_count)]
     return [format_one(i) for i in range(1, provided_count + 1)]
