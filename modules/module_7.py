@@ -229,6 +229,77 @@ def allocate_fallback_round_robin(
     return selected_items, acc_used_combos, acc_used_skus, global_fallback_pointer
 
 
+def _cell_text(value):
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() in ("nan", "none"):
+        return ""
+    return text
+
+
+def _row_identity(item):
+    """整行完全相同才视为重复。同一 SKU 的不同素材、出价会保留。"""
+    return tuple(sorted((str(k), _cell_text(v)) for k, v in item.items()))
+
+
+def dedupe_identical_rows(raw_pool):
+    """按 SKU 表原顺序去掉完全相同的行，保留第一次出现的那条。返回 (rows, dropped)。"""
+    seen = set()
+    rows = []
+    dropped = 0
+    for item in raw_pool:
+        if not _sku_id(item):
+            continue
+        identity = _row_identity(item)
+        if identity in seen:
+            dropped += 1
+            continue
+        seen.add(identity)
+        rows.append(item)
+    return rows, dropped
+
+
+def order_by_sku_depth(rows):
+    """
+    先每个 SKU 的第 1 条素材，再每个 SKU 的第 2 条，以此类推。
+    SKU 顺序、同一 SKU 内的素材顺序都保持表中首次出现的顺序。
+    """
+    sku_group, ordered_skus = build_depth_matrix(rows)
+    if not ordered_skus:
+        return []
+    max_depth = max(len(items) for items in sku_group.values())
+    ordered = []
+    for depth in range(max_depth):
+        for sku in ordered_skus:
+            items = sku_group[sku]
+            if depth < len(items):
+                ordered.append(items[depth])
+    return ordered
+
+
+def take_circular(raw_pool, target_count, cursor):
+    """
+    同一品类先去掉完全相同的行，再按「每个 SKU 第 1 条、再第 2 条」排成环。
+    cursor 是下一个账号要开始的位置，跨账号接着走；走到表尾就回到第一行。
+    返回 (selected_items, new_cursor, wrapped, dropped)。
+    """
+    unique_rows, dropped = dedupe_identical_rows(raw_pool)
+    cycle = order_by_sku_depth(unique_rows)
+    n = len(cycle)
+    if n == 0 or target_count <= 0:
+        return [], cursor, False, dropped
+
+    selected = []
+    wrapped = False
+    for i in range(target_count):
+        idx = (cursor + i) % n
+        if i > 0 and idx == 0:
+            wrapped = True
+        selected.append(cycle[idx].copy())
+    return selected, (cursor + target_count) % n, wrapped, dropped
+
+
 def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
     """
     对全部账号执行匹配
@@ -246,7 +317,10 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
     globally_consumed_combos = set()
     global_fallback_pointer = 0
     phase3_pointers = defaultdict(int)
-    is_mode_two = "模式二" in run_mode
+    category_cursors = defaultdict(int)
+    category_dedupe_logged = set()
+    is_mode_two = str(run_mode).startswith("模式二")
+    is_mode_three = str(run_mode).startswith("模式三")
     strict_unique_sku = not is_mode_two
 
     for idx, acc_dict in enumerate(acc_rows):
@@ -263,7 +337,44 @@ def run_allocation(acc_rows, sku_rows, run_mode, fallback_category=""):
             continue
 
         raw_pool = category_sku_map.get(category, [])
-        
+
+        # 模式三：同一品类共用一个环形指针，先铺开每个 SKU 的第 1 条素材
+        if is_mode_three:
+            if raw_pool:
+                selected_items, category_cursors[category], wrapped, dropped = take_circular(
+                    raw_pool, target_sku_count, category_cursors[category]
+                )
+                if dropped and category not in category_dedupe_logged:
+                    category_dedupe_logged.add(category)
+                    warning_logs.append(
+                        f"品类【{category}】有 {dropped} 行与前面完全相同，已去重后再分配。"
+                    )
+            else:
+                selected_items = []
+                warning_logs.append(f"❓ 行 {excel_line} [账号:{acc_id}] 主品类【{category}】未找到对应SKU。")
+
+            actual_count = len(selected_items)
+            gap = target_sku_count - actual_count
+            if gap == 0:
+                note_text = "完全匹配（品不足，已从头重复）" if wrapped else "完全匹配"
+            else:
+                note_text = f"⚠️ 缺{gap}个 ({actual_count}/{target_sku_count})"
+                gap_summary_list.append({
+                    "广告账号ID": acc_id,
+                    "品类": category,
+                    "目标数量": target_sku_count,
+                    "实际获取": actual_count,
+                    "缺口数量": gap,
+                })
+            for item in selected_items:
+                item["广告账号ID"] = acc_id
+                item["主页ID"] = zhuye
+                item["像素ID"] = xiangsu
+                item["系列标注"] = xilie
+                item["备注"] = note_text
+                final_rows.append(item)
+            continue
+
         # 🌟 修改核心：即便主品类没有找到 SKU，在模式二下也不直接 continue！
         if raw_pool:
             selected_items, acc_used_combos, acc_used_skus, phase3_pointers[category] = (
@@ -341,6 +452,7 @@ _LOGIC_DOC = """
 
 - **模式一**：只用主品类，不够就停；账号内同一 SKU 只出一次  
 - **模式二**：主品类用完可用后备品类补齐；账号内允许同 SKU 不同素材，禁止同 SKU 同素材  
+- **模式三**：同一品类先去掉完全相同的行。环的顺序是每个 SKU 的第 1 条素材，不够再拿第 2 条。下一个账号接着上一个账号停下的位置；走到末尾回到第一条，直到凑满。不使用后备品类  
 """
 
 
@@ -359,12 +471,13 @@ def run(params):
             [
                 "模式一：有多少是多少 (广度优先，不补齐)",
                 "模式二：不足补齐 (模式一逻辑 + 后备品类均摊)",
+                "模式三：按品类顺序分配，不足则从头重复直到满足数量",
             ],
-            help="模式一：账号内SKU绝对不重复、宁缺毋滥；模式二：允许同SKU不同素材，主品类用干后后备环形补齐（全局消耗）",
+            help="模式一：账号内SKU绝对不重复、宁缺毋滥；模式二：允许同SKU不同素材，主品类用干后后备环形补齐（全局消耗）；模式三：先每个SKU的第1条素材，不够再拿第2条，账号之间接着分，到末尾回到第一条直到凑满",
         )
 
         fallback_category = ""
-        if "模式二" in run_mode:
+        if str(run_mode).startswith("模式二"):
             fallback_category = st.text_input(
                 "➕ 后备补齐品类 (选填)",
                 value="",

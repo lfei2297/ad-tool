@@ -88,6 +88,12 @@ st.markdown("""
         .block-container [data-testid="stFileUploaderDropzoneInstructions"] {
             display: none !important;
         }
+        /* 模块七：上传框与左侧三个模式选项同高 */
+        .block-container .st-key-m7_up [data-testid="stFileUploaderDropzone"] {
+            min-height: 3.9rem !important;
+            height: 3.9rem !important;
+            max-height: 3.9rem !important;
+        }
         .block-container [data-testid="stNumberInputContainer"] > div,
         .block-container [data-testid="stNumberInputContainer"] [data-baseweb="input"],
         .block-container [data-testid="stNumberInputContainer"] [data-baseweb="input"] > div,

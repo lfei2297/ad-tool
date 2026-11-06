@@ -19,6 +19,8 @@ from modules.module_7 import (
     run_allocation,
     make_combo_key,
     allocate_fallback_round_robin,
+    take_circular,
+    order_by_sku_depth,
 )
 
 
@@ -518,6 +520,184 @@ def test_mode_diff_same_sku_different_material():
     print("✅ 用例10 通过")
 
 
+def test_mode3_matches_mode2_when_pool_is_enough():
+    """品够：模式三与模式二主品类结果一致，账号内组合不重复，不触发回头重复。"""
+    acc_rows = [
+        make_acc("账号1", "女装", 3),
+        make_acc("账号2", "女装", 2),
+    ]
+    sku_rows = [
+        make_sku("SKU1", "素材1", "女装"),
+        make_sku("SKU2", "素材1", "女装"),
+        make_sku("SKU3", "素材1", "女装"),
+        make_sku("SKU4", "素材1", "女装"),
+        make_sku("SKU5", "素材1", "女装"),
+    ]
+
+    final2, _, gaps2 = run_allocation(acc_rows, sku_rows, "模式二")
+    final3, _, gaps3 = run_allocation(acc_rows, sku_rows, "模式三：按品类顺序分配")
+    print_result("用例12：模式三品够时同模式二", final3, gaps3, [])
+
+    s2 = {aid: items for aid, items, _ in summarize(final2)}
+    s3 = {aid: (items, note) for aid, items, note in summarize(final3)}
+    assert [(x[0], x[1]) for x in s3["账号1"][0]] == [(x[0], x[1]) for x in s2["账号1"]]
+    assert [(x[0], x[1]) for x in s3["账号2"][0]] == [(x[0], x[1]) for x in s2["账号2"]]
+    assert s3["账号1"][1] == "完全匹配"
+    assert s3["账号2"][1] == "完全匹配"
+    assert_unique_combos(s3["账号1"][0], "账号1")
+    assert_unique_combos(s3["账号2"][0], "账号2")
+    assert not gaps2 and not gaps3
+    print("✅ 用例12 通过")
+
+
+def test_mode3_repeats_from_start_until_target():
+    """
+    品不够：先按模式二拿完仅有的组合，再按 SKU 表顺序从头循环，直到凑满数量。
+    池子 SKU1素材1、SKU2素材1，账号要 5 → SKU1, SKU2, SKU1, SKU2, SKU1
+    """
+    acc_rows = [make_acc("账号1", "女装", 5)]
+    sku_rows = [
+        make_sku("SKU1", "素材1", "女装"),
+        make_sku("SKU2", "素材1", "女装"),
+    ]
+
+    final2, _, gaps2 = run_allocation(acc_rows, sku_rows, "模式二")
+    assert len(summarize(final2)[0][1]) == 2
+    assert gaps2 and gaps2[0]["缺口数量"] == 3
+
+    final3, warns3, gaps3 = run_allocation(acc_rows, sku_rows, "模式三")
+    print_result("用例13：模式三品不够从头重复", final3, gaps3, warns3)
+    items, note = summarize(final3)[0][1], summarize(final3)[0][2]
+    assert [(x[0], x[1]) for x in items] == [
+        ("SKU1", "素材1"),
+        ("SKU2", "素材1"),
+        ("SKU1", "素材1"),
+        ("SKU2", "素材1"),
+        ("SKU1", "素材1"),
+    ]
+    assert note == "完全匹配（品不足，已从头重复）"
+    assert not gaps3
+    print("✅ 用例13 通过")
+
+
+def test_mode3_second_account_continues_after_first_wrap():
+    """
+    110 个品各一行，两个账号各要 120。
+    账号1：第 1–110 行，再从第 1 行拿 10 个。指针停在第 11 行。
+    账号2：从第 11 行拿到第 110 行（100 个），再从第 1 行拿 20 个。
+    """
+    acc_rows = [
+        make_acc("账号1", "女装", 120),
+        make_acc("账号2", "女装", 120),
+    ]
+    sku_rows = [make_sku(f"S{i:03d}", "素材1", "女装") for i in range(1, 111)]
+
+    final, _, gaps = run_allocation(acc_rows, sku_rows, "模式三")
+    s = {aid: [x[0] for x in items] for aid, items, _ in summarize(final)}
+    names = [f"S{i:03d}" for i in range(1, 111)]
+    assert s["账号1"] == names + names[:10]
+    assert s["账号2"] == names[10:] + names[:20]
+    assert len(s["账号1"]) == 120 and len(s["账号2"]) == 120
+    assert not gaps
+    print("✅ 用例14 通过")
+
+
+def test_mode3_does_not_use_fallback_category():
+    """模式三只循环主品类，不拿后备品类。"""
+    acc_rows = [make_acc("账号1", "女装", 4)]
+    sku_rows = [
+        make_sku("SKU1", "素材1", "女装"),
+        make_sku("建材A", "素材1", "家庭建材"),
+        make_sku("建材B", "素材1", "家庭建材"),
+    ]
+    final, _, gaps = run_allocation(acc_rows, sku_rows, "模式三", fallback_category="家庭建材")
+    items = summarize(final)[0][1]
+    assert [(x[0], x[2]) for x in items] == [
+        ("SKU1", "女装"),
+        ("SKU1", "女装"),
+        ("SKU1", "女装"),
+        ("SKU1", "女装"),
+    ]
+    assert not gaps
+    print("✅ 用例15 通过")
+
+
+def test_take_circular_unit():
+    pool = [
+        make_sku("SKU1", "素材1", "女装"),
+        make_sku("SKU2", "素材2", "女装"),
+    ]
+    out, cursor, wrapped, dropped = take_circular(pool, 3, 0)
+    assert wrapped and cursor == 1 and dropped == 0
+    assert [_sku_from(x) for x in out] == ["SKU1", "SKU2", "SKU1"]
+    out2, cursor2, wrapped2, _ = take_circular(pool, 2, cursor)
+    assert wrapped2 and cursor2 == 1
+    assert [_sku_from(x) for x in out2] == ["SKU2", "SKU1"]
+    print("✅ 用例16 通过")
+
+
+def test_mode3_spreads_first_material_before_second():
+    """
+    表序是 SKU1素材1、SKU1素材2、SKU2素材1、SKU2素材2。
+    先拿每个 SKU 的第 1 条。账号1要 3 条：SKU1素材1、SKU2素材1、SKU1素材2。
+    账号2从停下的位置继续：SKU2素材2、SKU1素材1、SKU2素材1。
+    """
+    sku_rows = [
+        make_sku("SKU1", "素材1", "女装"),
+        make_sku("SKU1", "素材2", "女装"),
+        make_sku("SKU2", "素材1", "女装"),
+        make_sku("SKU2", "素材2", "女装"),
+    ]
+    ordered = order_by_sku_depth(sku_rows)
+    assert [(x["虚拟SKU"], x["广告素材版本名称"]) for x in ordered] == [
+        ("SKU1", "素材1"),
+        ("SKU2", "素材1"),
+        ("SKU1", "素材2"),
+        ("SKU2", "素材2"),
+    ]
+    final, _, gaps = run_allocation(
+        [make_acc("账号1", "女装", 3), make_acc("账号2", "女装", 3)],
+        sku_rows,
+        "模式三",
+    )
+    print_result("用例18：模式三先铺开每个SKU第1条素材", final, gaps, [])
+    s = {aid: [(x[0], x[1]) for x in items] for aid, items, _ in summarize(final)}
+    assert s["账号1"] == [("SKU1", "素材1"), ("SKU2", "素材1"), ("SKU1", "素材2")]
+    assert s["账号2"] == [("SKU2", "素材2"), ("SKU1", "素材1"), ("SKU2", "素材1")]
+    assert not gaps
+    print("✅ 用例18 通过")
+
+
+def test_mode3_drops_identical_rows_before_wrapping():
+    """
+    5 行里 SKU-A 完全相同地出现 3 次。去重后剩 3 行再补到 8。
+    不去重时 A 会在一轮里就出现 3 次，回头后更容易叠到 6 次。
+    同一 SKU 换了素材的行要保留。
+    """
+    duplicate = make_sku("SKU-A", "素材1", "女装")
+    sku_rows = [
+        duplicate,
+        make_sku("SKU-B", "素材1", "女装"),
+        dict(duplicate),
+        dict(duplicate),
+        make_sku("SKU-C", "素材1", "女装"),
+        make_sku("SKU-A", "素材2", "女装"),
+    ]
+    final, warns, gaps = run_allocation(
+        [make_acc("账号1", "女装", 8)], sku_rows, "模式三"
+    )
+    print_result("用例17：模式三完全相同行先去重", final, gaps, warns)
+    items = [x[0] + "|" + x[1] for x in summarize(final)[0][1]]
+    assert items == [
+        "SKU-A|素材1", "SKU-B|素材1", "SKU-C|素材1", "SKU-A|素材2",
+        "SKU-A|素材1", "SKU-B|素材1", "SKU-C|素材1", "SKU-A|素材2",
+    ]
+    assert items.count("SKU-A|素材1") == 2
+    assert any("已去重" in w for w in warns)
+    assert not gaps
+    print("✅ 用例17 通过")
+
+
 if __name__ == "__main__":
     tests = [
         test_mode1_phase1_breadth_and_sequential,
@@ -531,6 +711,13 @@ if __name__ == "__main__":
         test_fallback_prefers_unused_sku_then_mat2,
         test_mode_diff_same_sku_different_material,
         test_phase3_sequential_no_restart,
+        test_mode3_matches_mode2_when_pool_is_enough,
+        test_mode3_repeats_from_start_until_target,
+        test_mode3_second_account_continues_after_first_wrap,
+        test_mode3_does_not_use_fallback_category,
+        test_take_circular_unit,
+        test_mode3_drops_identical_rows_before_wrapping,
+        test_mode3_spreads_first_material_before_second,
     ]
     failed = []
     for t in tests:
