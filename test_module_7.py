@@ -24,13 +24,14 @@ from modules.module_7 import (
 )
 
 
-def make_sku(sku, mat, category, lp="LP1", real_sku=""):
+def make_sku(sku, mat, category, lp="LP1", real_sku="", mat_id=""):
     return {
         "真实SKU": real_sku,
         "虚拟SKU": sku,
         "国家": "美国",
         "着陆页版本名称": lp,
         "广告素材版本名称": mat,
+        "广告素材ID": mat_id,
         "商品分类": category,
         "出价/竞价": "",
     }
@@ -698,6 +699,86 @@ def test_mode3_drops_identical_rows_before_wrapping():
     print("✅ 用例17 通过")
 
 
+def _id_pool_like_bid_sheet():
+    """一个品类 6 个 SKU、10 个素材 ID，版本名留空。结构对齐周末选品表。"""
+    return [
+        make_sku("II", "", "27", mat_id="II-1"),
+        make_sku("II", "", "27", mat_id="II-2"),
+        make_sku("II", "", "27", mat_id="II-3"),
+        make_sku("SN", "", "27", mat_id="SN-1"),
+        make_sku("SN", "", "27", mat_id="SN-2"),
+        make_sku("EU", "", "27", mat_id="EU-1"),
+        make_sku("QS", "", "27", mat_id="QS-1"),
+        make_sku("AY", "", "27", mat_id="AY-1"),
+        make_sku("GR", "", "27", lp="LP-A", mat_id="GR-1"),
+        make_sku("GR", "", "27", lp="LP-B", mat_id="GR-2"),
+    ]
+
+
+def test_combo_key_uses_material_id_and_version():
+    """版本名、素材 ID 都能拆开同一 SKU；两列都空才按 SKU+着陆页合并。"""
+    same = make_sku("S", "V1", "女装", mat_id="ID1")
+    other_id = make_sku("S", "V1", "女装", mat_id="ID2")
+    other_ver = make_sku("S", "V2", "女装", mat_id="ID1")
+    version_only_a = make_sku("S", "V1", "女装")
+    version_only_b = make_sku("S", "V2", "女装")
+    blank_id = make_sku("S", "V1", "女装", mat_id="nan")
+    assert make_combo_key(same) != make_combo_key(other_id)
+    assert make_combo_key(same) != make_combo_key(other_ver)
+    assert make_combo_key(same) == make_combo_key(dict(same))
+    assert make_combo_key(version_only_a) != make_combo_key(version_only_b)
+    assert make_combo_key(version_only_a) == make_combo_key(blank_id)
+    assert make_combo_key(same) == ("S", "LP1", "V1", "ID1")
+    print("✅ 用例19 通过")
+
+
+def test_mode2_fills_when_only_material_id_differs():
+    """版本名为空、素材 ID 够数时，模式二按素材 ID 分满，不再报缺口。"""
+    sku_rows = _id_pool_like_bid_sheet()
+    final, _, gaps = run_allocation(
+        [make_acc("账号1", "27", 10), make_acc("账号2", "27", 10)],
+        sku_rows,
+        "模式二",
+    )
+    print_result("用例20：模式二按素材ID分满", final, gaps, [])
+    by_acc = defaultdict(list)
+    for row in final:
+        by_acc[row["广告账号ID"]].append(row["广告素材ID"])
+    assert not gaps
+    for aid in ("账号1", "账号2"):
+        assert sorted(by_acc[aid]) == [
+            "AY-1", "EU-1", "GR-1", "GR-2", "II-1", "II-2", "II-3", "QS-1", "SN-1", "SN-2",
+        ]
+    print("✅ 用例20 通过")
+
+
+def test_mode1_material_id_still_unique_sku():
+    """模式一只认 SKU。同一 SKU 的多条素材 ID 仍然只出一次。"""
+    final, _, gaps = run_allocation(
+        [make_acc("账号1", "27", 10)],
+        _id_pool_like_bid_sheet(),
+        "模式一",
+    )
+    print_result("用例21：模式一素材ID仍按SKU去重", final, gaps, [])
+    skus = [_sku_from(row) for row in final]
+    assert len(skus) == 6 and len(set(skus)) == 6
+    assert gaps[0]["缺口数量"] == 4
+    print("✅ 用例21 通过")
+
+
+def test_mode2_same_material_id_is_not_reused_in_account():
+    """同一 SKU、同一素材 ID 的重复行，账号内只出一次。"""
+    sku_rows = [
+        make_sku("S", "", "女装", mat_id="ID1"),
+        make_sku("S", "", "女装", mat_id="ID1"),
+    ]
+    final, _, gaps = run_allocation([make_acc("账号1", "女装", 2)], sku_rows, "模式二")
+    assert len(final) == 1
+    assert final[0]["广告素材ID"] == "ID1"
+    assert gaps[0]["缺口数量"] == 1
+    print("✅ 用例22 通过")
+
+
 if __name__ == "__main__":
     tests = [
         test_mode1_phase1_breadth_and_sequential,
@@ -718,6 +799,10 @@ if __name__ == "__main__":
         test_take_circular_unit,
         test_mode3_drops_identical_rows_before_wrapping,
         test_mode3_spreads_first_material_before_second,
+        test_combo_key_uses_material_id_and_version,
+        test_mode2_fills_when_only_material_id_differs,
+        test_mode1_material_id_still_unique_sku,
+        test_mode2_same_material_id_is_not_reused_in_account,
     ]
     failed = []
     for t in tests:
